@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+# One in-flight run per PR branch; new pushes cancel the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # GitHub-hosted: Node pinned via setup-node, pnpm via corepack. (Deploy — cd.yml —
+    # stays self-hosted because it needs SSH access to the private k3s cluster.)
+    runs-on: ubuntu-latest
+
+    services:
+      # Ephemeral Postgres for integration tests: a CI service container rather than
+      # testcontainers, which avoids disk churn and flakes on the shared runner.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dallio
+          POSTGRES_PASSWORD: dallio
+          POSTGRES_DB: dallio_tasks_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U dallio -d dallio_tasks_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://dallio:dallio@localhost:5432/dallio_tasks_test?schema=public
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # pnpm via corepack (version pinned by package.json "packageManager").
+      - name: Enable pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Apply migrations to test DB
+        run: pnpm exec prisma migrate deploy
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Integration tests
+        run: pnpm test:integration

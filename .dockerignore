@@ -1,0 +1,38 @@
+# Keep the build context small and free of secrets / process cruft.
+# NOTE: prisma/ is intentionally NOT ignored — the build runs `prisma generate`
+# and the runtime image ships the schema + migrations for the migrate Job.
+
+# deps / build output (reinstalled/rebuilt inside the image)
+node_modules
+.next
+out
+build
+coverage
+
+# vcs / secrets
+.git
+.gitignore
+.env
+.env.*
+
+# tests & e2e (not needed to build or run the server)
+**/*.test.ts
+**/*.test.tsx
+test-results
+playwright-report
+e2e
+playwright.config.ts
+vitest.config.ts
+vitest.integration.config.ts
+
+# process / orchestration / docs (not part of the runtime)
+.dev
+.claude
+.husky
+docs
+*.md
+
+# infra sources (rendered/applied outside the image)
+k8s
+scripts
+.github

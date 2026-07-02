@@ -1,0 +1,92 @@
+# In-cluster Postgres for the app: StatefulSet + volumeClaimTemplate on the default `local-path`
+# StorageClass. `local-path` PVs default to reclaimPolicy: Delete, so deleting the PVC or the
+# namespace destroys the data — patch the bound PV to Retain out-of-band if the data must survive.
+# For a real prod DB prefer managed Postgres (Neon); this is the self-hosted default for the k3s
+# deploy. The pod keeps the stock postgres image's user model rather than the app's hardened
+# securityContext, because the official image needs to manage its own data dir ownership.
+#
+# Headless Service backing the StatefulSet. DATABASE_URL targets `dallio-postgres:5432`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dallio-postgres
+  labels:
+    app.kubernetes.io/name: dallio-tasks
+    app.kubernetes.io/component: postgres
+spec:
+  clusterIP: None # headless (stable per-pod DNS via the StatefulSet)
+  selector:
+    app.kubernetes.io/name: dallio-tasks
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dallio-postgres
+  labels:
+    app.kubernetes.io/name: dallio-tasks
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: dallio-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dallio-tasks
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dallio-tasks
+        app.kubernetes.io/component: postgres
+    spec:
+      securityContext:
+        # postgres:16-alpine runs as uid 70 (postgres); let it own the volume.
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          # Credentials + POSTGRES_DB come from the postgres Secret (out-of-band,
+          # see secret.example.yaml). PGDATA points at a subdir so the mount root
+          # (which may contain lost+found) is not used directly.
+          envFrom:
+            - secretRef:
+                name: dallio-postgres
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

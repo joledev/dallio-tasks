@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dallio-tasks
+
+# NOTE: migrate-job.yaml is intentionally NOT listed here. It is a per-SHA
+# TEMPLATE that scripts/deploy.sh renders + applies separately (name suffixed
+# with the image SHA) as a gated pre-rollout step.
+resources:
+  - namespace.yaml
+  - postgres-statefulset.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# Real Secrets (dallio-tasks-app, dallio-postgres, ghcr-pull) are created
+# out-of-band via `kubectl create secret` — see secret.example.yaml. They are
+# never committed with real values.
+
+# Modern label transformer (not commonLabels) so the label is NOT injected into
+# pod selectors — selectors are immutable and would break future updates.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: dallio-tasks

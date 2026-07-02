@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dallio-tasks
+  labels:
+    app.kubernetes.io/name: dallio-tasks
+  annotations:
+    # cert-manager issues + renews the TLS cert into the `dallio-tasks-tls` Secret.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - dallio-tasks.joledev.com # overlays may patch the host
+      secretName: dallio-tasks-tls
+  rules:
+    - host: dallio-tasks.joledev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dallio-tasks
+                port:
+                  name: http
