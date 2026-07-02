@@ -1,31 +1,53 @@
-# Dependencies
-node_modules/
-.pnp/
-vendor/
-__pycache__/
-.venv/
-venv/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Builds / output
-dist/
-build/
-out/
-*.egg-info/
-target/
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Env & secrets
-.env
-.env.*
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 !.env.example
 
-# Logs / DBs
-*.log
-*.sqlite
-*.sqlite3
-*.db
+# --- Proceso / orquestación (NO forma parte del entregable) ---
+.claude/
+.dev/
+process/
+graphify-out/
+*.agent.log
 
-# Editor / OS
-.DS_Store
-.idea/
-.vscode/
-*.swp
+# Playwright
+playwright-report/
+test-results/
