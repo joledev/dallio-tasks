@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dallio-tasks
+
+resources:
+  - ../../base
+
+# Image pin. scripts/deploy.sh overrides the tag per-deploy with the commit SHA:
+#   kubectl kustomize --load-restrictor=... | sed  OR  `kustomize edit set image`.
+# The CD workflow calls deploy.sh <sha>, which substitutes newTag before render.
+images:
+  - name: ghcr.io/joledev/dallio-tasks
+    newName: ghcr.io/joledev/dallio-tasks
+    newTag: latest # replaced with the commit SHA at deploy time
+
+# Prod resources/replicas via a strategic-merge patch. The base Ingress already sets the prod host
+# and TLS secret, so no ingress patch is needed here.
+patches:
+  - path: deployment-prod.yaml
+    target:
+      kind: Deployment
+      name: dallio-tasks
