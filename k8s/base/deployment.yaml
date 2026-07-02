@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dallio-tasks
+  labels:
+    app.kubernetes.io/name: dallio-tasks
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1 # overlays bump this
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dallio-tasks
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dallio-tasks
+        app.kubernetes.io/component: web
+    spec:
+      # GHCR is private → pull with a read:packages token (created out-of-band):
+      #   kubectl -n dallio-tasks create secret docker-registry ghcr-pull \
+      #     --docker-server=ghcr.io --docker-username=<user> --docker-password=<PAT>
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          # overlays/prod pins this via the `images:` transformer (name + tag).
+          image: ghcr.io/joledev/dallio-tasks:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          # App config + DATABASE_URL come from the app Secret (created out-of-band,
+          # see secret.example.yaml). Nothing sensitive is baked into the image.
+          envFrom:
+            - secretRef:
+                name: dallio-tasks-app
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness is a shallow TCP check: readiness already gates traffic on /api/health, so a
+          # transient DB blip pulls the pod from the Service instead of triggering a restart storm.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Next writes a small cache under .next at runtime; keep root FS read-only.
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
