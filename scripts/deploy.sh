@@ -29,7 +29,7 @@ log() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 # Run kubectl on the remote host. Manifests are piped via stdin where needed.
 kc() { ssh "$REMOTE" kubectl "$@"; }
 # Apply a local manifest file on the remote.
-kc_apply_file() { ssh "$REMOTE" "kubectl apply -f -" < "$1"; }
+kc_apply_file() { ssh "$REMOTE" "kubectl apply -n $NAMESPACE -f -" < "$1"; }
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
