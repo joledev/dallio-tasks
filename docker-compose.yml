@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dallio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: dallio_tasks
+    ports:
+      - '5432:5432'
+    volumes:
+      - dallio_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U user -d dallio_tasks']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dallio_pgdata:
