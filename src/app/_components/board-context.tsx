@@ -68,7 +68,8 @@ export function BoardProvider({
     if (!isJoined) queryClient.removeQueries({ queryKey: boardKeys(token) });
   }, [isJoined, token, queryClient]);
 
-  useBoardStream(token, isJoined, present);
+  // Pass the current participant id so the stream can skip toasting the user's OWN actions.
+  useBoardStream(token, isJoined, present, participant?.id ?? null);
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
 }

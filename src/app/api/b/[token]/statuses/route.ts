@@ -8,6 +8,7 @@ import { createStatus, listStatuses } from '@/core/statuses/use-cases';
 import { statusRepository } from '@/core/statuses/container';
 import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
+import { eventBus } from '@/core/realtime/container';
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -24,7 +25,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!actor.ok) return actor;
     const parsed = parse(createStatusSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return createStatus(statusRepository, actor.data, parsed.data);
+    return createStatus(statusRepository, actor.data, parsed.data, eventBus);
   }, 201);
 }
 

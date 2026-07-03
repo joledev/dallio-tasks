@@ -64,6 +64,23 @@ describe('guestCsrfCheck (H5)', () => {
     if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
   });
 
+  // Regression: a bodiless same-origin DELETE has no Content-Type, and requiring JSON on it would break
+  // legit deletes (a cross-origin DELETE is CORS-preflighted anyway). It must pass the CSRF check.
+  it('same-origin bodiless DELETE (no Content-Type) → allowed (exempt from JSON guard)', () => {
+    const res = guestCsrfCheck(
+      new Request(URL, { method: 'DELETE', headers: { 'sec-fetch-site': 'same-origin' } }),
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it('POST with no Content-Type still → VALIDATION_ERROR (JSON guard unchanged)', () => {
+    const res = guestCsrfCheck(
+      new Request(URL, { method: 'POST', headers: { 'sec-fetch-site': 'same-origin' } }),
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
+  });
+
   // Regression: behind a TLS-terminating proxy the request lands as internal http, but the browser's
   // Origin is https + the public host arrives via X-Forwarded-Host. Same-origin must be accepted.
   it('proxied same-origin (https Origin, internal http req.url, X-Forwarded-Host) → allowed', () => {
