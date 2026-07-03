@@ -4,6 +4,7 @@ import { resolveActingUserId } from '@/app/api/_shared/session';
 import { createTaskSchema, listTasksQuerySchema } from '@/core/tasks/schema';
 import { createTask, listTasks } from '@/core/tasks/use-cases';
 import { taskRepository } from '@/core/tasks/container';
+import { statusRepository } from '@/core/statuses/container';
 
 export async function POST(req: Request) {
   return handle(async () => {
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth;
     const parsed = parse(createTaskSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return createTask(taskRepository, auth.data, parsed.data);
+    return createTask(taskRepository, statusRepository, auth.data, parsed.data);
   }, 201);
 }
 
