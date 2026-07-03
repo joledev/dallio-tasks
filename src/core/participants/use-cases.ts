@@ -45,6 +45,10 @@ export async function joinBoard(
   }
 
   // H2 — per-board cap: reject once the board is full (row-exhaustion / launch-time DoS guard).
+  // NB: this count→create is a BEST-EFFORT floor, not a hard guarantee — the read and the insert are
+  // not atomic, so a concurrent burst of joins can modestly overshoot MAX_PARTICIPANTS. That is
+  // acceptable here: the real per-IP rate limiter is wired in L3; this is only the interim floor so
+  // shipping L1b first is safe. No row lock / serializable transaction is warranted for it.
   const count = await participantRepo.countByBoard(board.id);
   if (count >= MAX_PARTICIPANTS) return err('LIMIT_EXCEEDED', 'This board is full');
 

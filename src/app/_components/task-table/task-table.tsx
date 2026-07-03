@@ -201,10 +201,7 @@ export function TaskTable() {
                     <PrioritySelect taskId={task.id} priority={task.priority} />
                   </TableCell>
                   <TableCell>
-                    <AssignControl
-                      taskId={task.id}
-                      assigneeParticipantId={task.assigneeParticipantId}
-                    />
+                    <AssignControl assigneeParticipantId={task.assigneeParticipantId} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDate(task.createdAt)}

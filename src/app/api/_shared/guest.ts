@@ -42,25 +42,36 @@ export function guestCookie(token: string): GuestCookie {
 }
 
 // H5 — CSRF defense-in-depth for guest mutations (/api/b/[token]/* writes + /join). SameSite=Lax is the
-// baseline; this is the belt:
-//   - reject if `Sec-Fetch-Site` is present and cross-site (or `Origin` present and not same-origin);
-//   - require `Content-Type: application/json` (blocks simple/form cross-site POSTs).
-// GET is never state-changing on guest routes, so this guard runs only on POST/PATCH/DELETE handlers.
+// baseline; this is the belt. A mutation must present a POSITIVE same-origin signal — either
+// `Sec-Fetch-Site: same-origin`/`none`, or an `Origin` header that matches the request origin. If BOTH
+// signals are absent the request is REJECTED (no header-less bypass), and any cross-site/cross-origin
+// signal is rejected outright. Mutations must also be `Content-Type: application/json` (blocks
+// simple/form cross-site POSTs). GET is never state-changing on guest routes, so this guard runs only
+// on POST/PATCH/DELETE handlers.
 export function guestCsrfCheck(req: Request): Result<null> {
   const secFetchSite = req.headers.get('sec-fetch-site');
+  // A cross-site fetch-metadata signal is an immediate reject.
   if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'none') {
     return err('FORBIDDEN', 'Cross-site request rejected');
   }
+  const secFetchOk = secFetchSite === 'same-origin' || secFetchSite === 'none';
 
   const origin = req.headers.get('origin');
+  let originOk = false;
   if (origin) {
-    let sameOrigin = false;
     try {
-      sameOrigin = new URL(origin).origin === new URL(req.url).origin;
+      originOk = new URL(origin).origin === new URL(req.url).origin;
     } catch {
-      sameOrigin = false;
+      originOk = false;
     }
-    if (!sameOrigin) return err('FORBIDDEN', 'Cross-origin request rejected');
+    // Origin present but cross-origin → reject.
+    if (!originOk) return err('FORBIDDEN', 'Cross-origin request rejected');
+  }
+
+  // Require at least one POSITIVE same-origin signal — both absent → reject (closes the header-less
+  // bypass where a request with no Origin AND no Sec-Fetch-Site would otherwise pass).
+  if (!secFetchOk && !originOk) {
+    return err('FORBIDDEN', 'Missing same-origin signal');
   }
 
   const contentType = req.headers.get('content-type') ?? '';
