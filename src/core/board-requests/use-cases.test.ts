@@ -179,8 +179,15 @@ describe('resolveRequest — owner approves/rejects a pending request', () => {
   });
 
   it('approve DELETE on an unprotected board deletes it and marks APPROVED', async () => {
-    const boardRepo = new InMemoryBoardRepository([board('b1', OWNER_A, 'A-1')]);
+    // Wire the FK cascade: deleting the board removes its BoardRequest rows (ON DELETE CASCADE). This
+    // reproduces the real DB — approve-DELETE must mark APPROVED and capture the projection BEFORE the
+    // delete cascades the request row away, or setStatus afterward hits a vanished row → false NOT_FOUND.
     const requestRepo = new InMemoryBoardRequestRepository();
+    const boardRepo = new InMemoryBoardRepository(
+      [board('b1', OWNER_A, 'A-1')],
+      undefined,
+      (boardId) => requestRepo.cascadeDeleteByBoard(boardId),
+    );
     const created = await createRequest(
       requestRepo,
       { boardId: 'b1', participantId: PARTICIPANT_1 },
@@ -198,5 +205,7 @@ describe('resolveRequest — owner approves/rejects a pending request', () => {
     if (!res.ok) return;
     expect(res.data.status).toBe('APPROVED');
     expect(await boardRepo.getByToken('tok-b1')).toBeNull();
+    // The request row is gone (cascaded), but the owner still got a truthful APPROVED result.
+    expect(await requestRepo.getById(created.data.id)).toBeNull();
   });
 });

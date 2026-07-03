@@ -75,12 +75,18 @@ export async function resolveRequest(
     if (!request.proposedName) return err('VALIDATION_ERROR', 'Request has no proposed name');
     const renamed = await deps.boardRepo.rename(board.id, request.proposedName);
     if (!renamed) return err('NOT_FOUND', 'Board not found');
-  } else {
-    if (board.protected) return err('FORBIDDEN', 'The demo board cannot be deleted');
-    await deps.boardRepo.deleteById(board.id);
+    const updated = await deps.boardRequestRepo.setStatus(requestId, 'APPROVED');
+    if (!updated) return err('NOT_FOUND', 'Request not found');
+    return ok(toPublicBoardRequest(updated));
   }
 
-  const updated = await deps.boardRequestRepo.setStatus(requestId, 'APPROVED');
-  if (!updated) return err('NOT_FOUND', 'Request not found');
-  return ok(toPublicBoardRequest(updated));
+  // DELETE. Refuse the protected board up front (leave the request PENDING). Otherwise mark the
+  // request APPROVED and CAPTURE its projection BEFORE deleting the board: `BoardRequest.boardId` is
+  // ON DELETE CASCADE, so deleting the board removes this very row — running setStatus afterward would
+  // hit a vanished PK (Prisma P2025) and wrongly report NOT_FOUND for a delete that actually succeeded.
+  if (board.protected) return err('FORBIDDEN', 'The demo board cannot be deleted');
+  const approved = await deps.boardRequestRepo.setStatus(requestId, 'APPROVED');
+  if (!approved) return err('NOT_FOUND', 'Request not found');
+  await deps.boardRepo.deleteById(board.id);
+  return ok(toPublicBoardRequest(approved));
 }

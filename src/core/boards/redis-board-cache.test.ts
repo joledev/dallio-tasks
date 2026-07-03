@@ -39,7 +39,7 @@ describe('RedisBoardCache', () => {
 
     await cache.setByToken(BOARD, 300);
 
-    expect(redis.ttl.get('board:token:tok-a')).toBe(300);
+    expect(redis.ttl.get('board:token:v2:tok-a')).toBe(300);
     await expect(cache.getByToken('tok-a')).resolves.toMatchObject({
       id: BOARD.id,
       shareToken: BOARD.shareToken,
@@ -50,10 +50,32 @@ describe('RedisBoardCache', () => {
 
   it('drops corrupt cache rows as a miss', async () => {
     const redis = new FakeRedis();
-    redis.rows.set('board:token:tok-a', '{');
+    redis.rows.set('board:token:v2:tok-a', '{');
     const cache = new RedisBoardCache(redis as never);
 
     await expect(cache.getByToken('tok-a')).resolves.toBeNull();
-    expect(redis.rows.has('board:token:tok-a')).toBe(false);
+    expect(redis.rows.has('board:token:v2:tok-a')).toBe(false);
+  });
+
+  it('treats a row without a boolean `protected` as a miss (stale pre-field shape)', async () => {
+    const redis = new FakeRedis();
+    // A shape written before `protected` existed: hydrating it would leave the delete-guard reading
+    // `undefined` (falsy) and bypass protection. It must be rejected as a miss and purged.
+    redis.rows.set(
+      'board:token:v2:tok-a',
+      JSON.stringify({
+        id: BOARD.id,
+        ownerId: BOARD.ownerId,
+        name: BOARD.name,
+        shareToken: BOARD.shareToken,
+        mode: BOARD.mode,
+        createdAt: BOARD.createdAt.toISOString(),
+        updatedAt: BOARD.updatedAt.toISOString(),
+      }),
+    );
+    const cache = new RedisBoardCache(redis as never);
+
+    await expect(cache.getByToken('tok-a')).resolves.toBeNull();
+    expect(redis.rows.has('board:token:v2:tok-a')).toBe(false);
   });
 });

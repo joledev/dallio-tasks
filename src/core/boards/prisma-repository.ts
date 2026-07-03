@@ -110,9 +110,11 @@ export class PrismaBoardRepository implements BoardRepository {
   }
 
   async deleteById(id: string) {
-    // Best-effort: the cache exposes no delete/invalidate method, so a stale token-cache entry can
-    // outlive the row for up to TOKEN_CACHE_TTL_SEC — acceptable (getByToken re-checks the DB once the
-    // TTL lapses) and out of scope to add here.
-    await prisma.board.delete({ where: { id } });
+    // Idempotent: a concurrent double-resolve can call this twice for the same board; the second delete
+    // would throw P2025 (row gone) and escape as a 500. Swallow it — the board is already deleted, which
+    // is the intended end state. (Cache note: no delete/invalidate method on BoardCache, so a stale
+    // token-cache entry can outlive the row for up to TOKEN_CACHE_TTL_SEC; getByToken re-checks the DB
+    // once the TTL lapses.)
+    await prisma.board.delete({ where: { id } }).catch(() => null);
   }
 }

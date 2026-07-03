@@ -8,6 +8,8 @@ export type Board = {
   mode: 'DIRECT' | 'VOTE';
   protected: boolean;
   taskCount?: number;
+  // Filled only by listByOwner (a filtered relation _count); undefined on single-board lookups.
+  pendingRequestCount?: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -26,7 +28,7 @@ export const toOwnerBoard = (b: Board): OwnerBoardView => ({
   shareToken: b.shareToken,
   taskCount: b.taskCount,
   protected: b.protected,
-  pendingRequestCount: undefined,
+  pendingRequestCount: b.pendingRequestCount,
   createdAt: b.createdAt,
   updatedAt: b.updatedAt,
 });

@@ -15,6 +15,9 @@ export class InMemoryBoardRepository implements BoardRepository {
   constructor(
     seed: Board[] = [],
     private statusRepo?: StatusRepository,
+    // Models the DB's ON DELETE CASCADE fan-out (e.g. BoardRequest rows) so tests exercise the same
+    // ordering constraints the real FKs impose — without it, a double masks cascade-order bugs.
+    private onDelete?: (boardId: string) => void,
   ) {
     this.rows = [...seed];
   }
@@ -74,5 +77,6 @@ export class InMemoryBoardRepository implements BoardRepository {
 
   async deleteById(id: string) {
     this.rows = this.rows.filter((b) => b.id !== id);
+    this.onDelete?.(id); // fan out the cascade (BoardRequest rows, etc.)
   }
 }

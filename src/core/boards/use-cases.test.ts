@@ -12,7 +12,7 @@ const board = (
   id: string,
   ownerId: string,
   name: string,
-  overrides: Partial<Pick<Board, 'protected'>> = {},
+  overrides: Partial<Pick<Board, 'protected' | 'pendingRequestCount'>> = {},
 ): Board => ({
   id,
   ownerId,
@@ -20,6 +20,7 @@ const board = (
   shareToken: `tok-${id}`,
   mode: 'DIRECT',
   protected: overrides.protected ?? false,
+  pendingRequestCount: overrides.pendingRequestCount,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -39,6 +40,19 @@ describe('listBoards — owner-scoped', () => {
     // the projection never carries the internal id / ownerId
     expect(res.data.every((b) => !('id' in b) && !('ownerId' in b))).toBe(true);
     expect(res.data.map((b) => b.shareToken).sort()).toEqual(['tok-b1', 'tok-b2']);
+  });
+
+  it('surfaces pendingRequestCount from the repository projection (owner approval UI depends on it)', async () => {
+    const repo = new InMemoryBoardRepository([
+      board('b1', OWNER_A, 'A-1', { pendingRequestCount: 3 }),
+      board('b2', OWNER_A, 'A-2'),
+    ]);
+    const res = await listBoards(repo, OWNER_A);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const byName = Object.fromEntries(res.data.map((b) => [b.name, b.pendingRequestCount]));
+    expect(byName['A-1']).toBe(3); // must be forwarded, not hardcoded to undefined
+    expect(byName['A-2']).toBeUndefined();
   });
 });
 

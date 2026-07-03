@@ -50,4 +50,10 @@ export class InMemoryBoardRequestRepository implements BoardRequestRepository {
     row.updatedAt = new Date();
     return row;
   }
+
+  // Test helper (not on the port): models the BoardRequest→Board ON DELETE CASCADE. Wire this into the
+  // board repo's onDelete hook so deleting a board removes its requests, reproducing the real FK.
+  cascadeDeleteByBoard(boardId: string): void {
+    this.rows = this.rows.filter((r) => r.boardId !== boardId);
+  }
 }
