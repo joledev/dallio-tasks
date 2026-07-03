@@ -177,6 +177,7 @@ export function useBoardStream(
     source.addEventListener('activity.appended', onActivityEvent);
 
     return () => {
+      source.removeEventListener('live', onLive);
       source.removeEventListener('refresh', refresh);
       for (const event of TASK_EVENTS) source.removeEventListener(event, onTaskEvent);
       for (const event of STATUS_EVENTS) source.removeEventListener(event, onStatusEvent);
