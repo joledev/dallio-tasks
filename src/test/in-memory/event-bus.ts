@@ -1,4 +1,4 @@
-import type { EventBus, Unsubscribe } from '@/core/realtime/event-bus';
+import type { EventBus, ReplayResult, Unsubscribe } from '@/core/realtime/event-bus';
 import type { BoardEvent, NewBoardEvent } from '@/core/realtime/events';
 
 // In-memory EventBus built to the same port contract, for unit tests (no Redis). Mirrors the Redis
@@ -38,9 +38,13 @@ export class InMemoryEventBus implements EventBus {
     };
   }
 
-  async replay(boardId: string, afterId: string): Promise<BoardEvent[]> {
+  async replay(boardId: string, afterId: string): Promise<ReplayResult> {
     const after = Number(afterId);
-    return (this.logs.get(boardId) ?? []).filter((e) => Number(e.id) > after);
+    const events = this.logs.get(boardId) ?? [];
+    return {
+      events: events.filter((e) => Number(e.id) > after),
+      oldestId: events[0]?.id ?? null,
+    };
   }
 
   async getCurrentSeq(boardId: string): Promise<string | null> {
