@@ -7,6 +7,7 @@ import { deleteStatus } from '@/core/statuses/use-cases';
 import { statusRepository } from '@/core/statuses/container';
 import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
+import { eventBus } from '@/core/realtime/container';
 
 type Ctx = { params: Promise<{ token: string; id: string }> };
 
@@ -24,6 +25,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
     if (!actor.ok) return actor;
     const id = parseId(p.id);
     if (!id.ok) return id;
-    return deleteStatus(statusRepository, actor.data, id.data);
+    return deleteStatus(statusRepository, actor.data, id.data, eventBus);
   });
 }

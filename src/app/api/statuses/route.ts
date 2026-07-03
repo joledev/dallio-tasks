@@ -5,6 +5,7 @@ import { createStatusSchema } from '@/core/statuses/schema';
 import { createStatus, listStatuses } from '@/core/statuses/use-cases';
 import { statusRepository } from '@/core/statuses/container';
 import { boardRepository } from '@/core/boards/container';
+import { eventBus } from '@/core/realtime/container';
 
 export async function POST(req: Request) {
   return handle(async () => {
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth;
     const parsed = parse(createStatusSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return createStatus(statusRepository, auth.data, parsed.data);
+    return createStatus(statusRepository, auth.data, parsed.data, eventBus);
   }, 201);
 }
 

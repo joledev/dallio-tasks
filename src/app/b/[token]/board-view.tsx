@@ -1,5 +1,8 @@
 'use client';
 
+import Link from 'next/link';
+import { LayoutDashboard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { FilterBar } from '@/app/_components/filter-bar';
 import { ViewToggle } from '@/app/_components/view-toggle';
 import { TaskTable } from '@/app/_components/task-table/task-table';
@@ -19,7 +22,15 @@ export function BoardView({ boardName }: { boardName: string }) {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{boardName}</h1>
+        <div className="flex min-w-0 items-center gap-3">
+          <Button asChild variant="ghost" className="min-h-11">
+            <Link href="/">
+              <LayoutDashboard className="size-4" aria-hidden />
+              All boards
+            </Link>
+          </Button>
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{boardName}</h1>
+        </div>
         <div className="flex items-center gap-2">
           <BoardModeToggle />
           <ViewToggle />

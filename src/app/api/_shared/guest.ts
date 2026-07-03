@@ -90,9 +90,15 @@ export function guestCsrfCheck(req: Request): Result<null> {
     return err('FORBIDDEN', 'Missing same-origin signal');
   }
 
-  const contentType = req.headers.get('content-type') ?? '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    return err('VALIDATION_ERROR', 'Content-Type must be application/json');
+  // The JSON content-type guard blocks cross-site *form* POSTs (always form/text content-types). Only
+  // body-carrying methods need it — a bodiless DELETE can't be a simple form submission, and any
+  // cross-origin DELETE is CORS-preflighted, so requiring JSON on it just breaks legit deletes.
+  const method = req.method.toUpperCase();
+  if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
+    const contentType = req.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      return err('VALIDATION_ERROR', 'Content-Type must be application/json');
+    }
   }
 
   return ok(null);
