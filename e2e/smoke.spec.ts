@@ -1,13 +1,30 @@
 import { test, expect } from '@playwright/test';
+import { SEED_BOARD_TOKEN } from '../prisma/seed-data';
 import { resetToSeed } from './reset';
 
 test.beforeAll(resetToSeed);
 
+async function openDemoBoard(page: import('@playwright/test').Page) {
+  await page.goto(`/b/${SEED_BOARD_TOKEN}`);
+  const dialog = page.getByRole('dialog');
+  if (await dialog.isVisible().catch(() => false)) {
+    await dialog.getByLabel('Display name').fill('E2E Smoke');
+    await dialog.getByRole('button', { name: 'Join board' }).click();
+    await expect(dialog).toBeHidden();
+  }
+  await expect(page.getByRole('heading', { name: 'My Board' })).toBeVisible();
+}
+
+test('dashboard lists the seed board', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Boards' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My Board' })).toBeVisible();
+});
+
 test('dashboard happy path across table and board views', async ({ page }) => {
   const uniqueTitle = `E2E smoke task ${Date.now()}`;
 
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Dallio Tasks' })).toBeVisible();
+  await openDemoBoard(page);
   // Table view renders the md+ table AND the mobile card list (one hidden per breakpoint), so a plain
   // getByText matches two nodes — scope to the visible table row.
   await expect(page.getByRole('row').filter({ hasText: 'Set up local Postgres' })).toBeVisible();

@@ -5,6 +5,7 @@ export type Board = {
   ownerId: string;
   name: string;
   shareToken: string;
+  taskCount?: number;
   createdAt: Date;
   updatedAt: Date;
 };

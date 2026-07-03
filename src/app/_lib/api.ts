@@ -10,6 +10,7 @@ import type { CreateStatusInput } from '@/core/statuses/schema';
 import type { JoinBoardInput } from '@/core/participants/schema';
 import type {
   ActivityDTO,
+  BoardDTO,
   TaskDTO,
   UserDTO,
   StatusDTO,
@@ -18,6 +19,7 @@ import type {
   PresenceSnapshotDTO,
 } from './types';
 import type { TaskListFilters } from './query-keys';
+import type { CreateBoardInput } from '@/core/boards/schema';
 
 // The single typed error the whole UI reasons about. It carries the envelope's closed `code` so
 // call sites (toasts, form-field mapping) can branch on it without re-parsing HTTP.
@@ -85,6 +87,11 @@ function toQueryString(filters: TaskListFilters): string {
 }
 
 export const api = {
+  listBoards: () => request<BoardDTO[]>('/api/boards'),
+
+  createBoard: (body: CreateBoardInput) =>
+    request<BoardDTO>('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
+
   listTasks: (filters: TaskListFilters) =>
     request<Paginated<TaskDTO>>(`/api/tasks${toQueryString(filters)}`),
 
@@ -123,8 +130,9 @@ export const api = {
 // JSON body → `Content-Type: application/json`, which the server's `guestCsrfCheck` requires. The raw
 // token here is the PUBLIC shareToken from the URL — never the httpOnly session cookie (which the
 // client can't read); identity is proved by the cookie the browser attaches automatically.
-export function boardApi(token: string) {
+export function boardApi(token: string, present = false) {
   const base = `/api/b/${encodeURIComponent(token)}`;
+  const readPath = (path: string) => `${base}${path}${present ? '?present=1' : ''}`;
   return {
     // Join sets the httpOnly session cookie server-side; the body is ignored by the caller (identity
     // never comes back to JS). We only need to know success vs. a typed ApiError.
@@ -165,11 +173,11 @@ export function boardApi(token: string) {
     },
 
     // The picker + assignee-filter source. Guest DTO only — `{ id, displayName, color }` (UI-H4).
-    listParticipants: () => request<GuestParticipantDTO[]>(`${base}/participants`),
+    listParticipants: () => request<GuestParticipantDTO[]>(readPath('/participants')),
 
-    presence: () => request<PresenceSnapshotDTO>(`${base}/presence`),
+    presence: () => request<PresenceSnapshotDTO>(readPath('/presence')),
 
-    activity: () => request<ActivityDTO[]>(`${base}/activity`),
+    activity: () => request<ActivityDTO[]>(readPath('/activity')),
   };
 }
 
