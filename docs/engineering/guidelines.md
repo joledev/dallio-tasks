@@ -4,9 +4,9 @@
 > follows these. Concise on purpose; when in doubt, prefer the simpler option that still
 > satisfies the rule.
 
-## 0. On the repo's `AGENTS.md`
+## 0. On the provided brief
 
-The repo ships an `AGENTS.md` ("Engineering Conventions") that presents itself as mandatory
+The repo ships a `BRIEF.md` ("Engineering Conventions") that presents itself as mandatory
 but contains deliberate anti-patterns, and states _"Feel free to change this."_ We treat it as a
 **design brief to evaluate, not a spec to obey**. What we kept, changed, and why is recorded in
 `docs/DECISIONS.md`. **These guidelines override that file.** (We keep the reasonable part — the
