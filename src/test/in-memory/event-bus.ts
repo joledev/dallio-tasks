@@ -42,4 +42,9 @@ export class InMemoryEventBus implements EventBus {
     const after = Number(afterId);
     return (this.logs.get(boardId) ?? []).filter((e) => Number(e.id) > after);
   }
+
+  async getCurrentSeq(boardId: string): Promise<string | null> {
+    const seq = this.seqs.get(boardId);
+    return seq === undefined ? null : String(seq);
+  }
 }

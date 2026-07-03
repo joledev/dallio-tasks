@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { boardKeys } from '@/app/_lib/query-keys';
+import { useBoardStream } from '@/app/_hooks/use-board-stream';
 import type { GuestParticipantDTO } from '@/app/_lib/types';
 
 // The guest board seam. Every board-scoped data hook reads `token` from here, so no component hardcodes
@@ -60,6 +61,8 @@ export function BoardProvider({
   useEffect(() => {
     if (!isJoined) queryClient.removeQueries({ queryKey: boardKeys(token) });
   }, [isJoined, token, queryClient]);
+
+  useBoardStream(token, isJoined);
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
 }

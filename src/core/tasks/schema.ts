@@ -25,9 +25,17 @@ export const updateTaskSchema = z
     description: z.string().trim().max(2000).nullable().optional(),
     statusId: z.uuid().optional(),
     priority: PriorityEnum.optional(),
+    position: z.number().int().min(0).optional(),
   })
   .strict()
   .refine((o) => Object.keys(o).length > 0, { message: 'Empty update' });
+
+export const moveTaskSchema = z
+  .object({
+    statusId: z.uuid(),
+    position: z.number().int().min(0),
+  })
+  .strict();
 
 // H1 (L1b-guest): assignment repoints from the legacy User FK to the board Participant. Only
 // `assigneeParticipantId` is accepted on any surface now; .strict() REJECTS the legacy `assigneeId`
@@ -54,6 +62,7 @@ export const listTasksQuerySchema = z.object({
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+export type MoveTaskInput = z.infer<typeof moveTaskSchema>;
 export type AssignTaskInput = z.infer<typeof assignTaskSchema>;
 export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
 export type TaskPriority = z.infer<typeof PriorityEnum>;

@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { InMemoryEventBus } from '@/test/in-memory/event-bus';
 import { InMemoryRateLimiter } from '@/test/in-memory/rate-limit';
 import { taskCreated } from './events';
+import { RedisEventBus } from './redis-event-bus';
 import type { Task } from '@/core/tasks/task';
 
 const BOARD = '00000000-0000-4000-8000-00000000000a';
@@ -23,6 +24,7 @@ const task: Task = {
   priority: 'MEDIUM',
   boardId: BOARD,
   assigneeParticipantId: null,
+  position: 0,
   createdAt: new Date('2020-01-01T00:00:00.000Z'),
   updatedAt: new Date('2020-01-01T00:00:00.000Z'),
 };
@@ -79,6 +81,25 @@ describe('EventSubscriber.replay (in-memory)', () => {
   });
 });
 
+describe('RedisEventBus seq seeding', () => {
+  it('seeds an absent board seq from wall-clock ms before INCR', async () => {
+    const client = new FakeRedis();
+    const bus = new RedisEventBus(client as never);
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValueOnce(1_000_000);
+    const first = await bus.publish(BOARD, taskCreated(BOARD, null, task));
+
+    client.resetSeq(BOARD);
+    now.mockReturnValueOnce(2_000_000);
+    const afterReset = await bus.publish(BOARD, taskCreated(BOARD, null, task));
+
+    expect(Number(first.id)).toBe(1_000_001);
+    expect(Number(afterReset.id)).toBe(2_000_001);
+    expect(Number(afterReset.id)).toBeGreaterThan(Number(first.id));
+    now.mockRestore();
+  });
+});
+
 describe('RateLimiter (in-memory)', () => {
   it('allows up to the limit then denies over-cap', async () => {
     const limiter = new InMemoryRateLimiter();
@@ -104,3 +125,48 @@ describe('RateLimiter (in-memory)', () => {
     expect((await limiter.check('write:pid', 1, 30)).allowed).toBe(true);
   });
 });
+
+class FakeRedis {
+  private readonly kv = new Map<string, string>();
+  private readonly lists = new Map<string, string[]>();
+
+  async set(key: string, value: string, mode?: string) {
+    if (mode === 'NX' && this.kv.has(key)) return null;
+    this.kv.set(key, value);
+    return 'OK';
+  }
+
+  async incr(key: string) {
+    const next = Number(this.kv.get(key) ?? '0') + 1;
+    this.kv.set(key, String(next));
+    return next;
+  }
+
+  async get(key: string) {
+    return this.kv.get(key) ?? null;
+  }
+
+  multi() {
+    const ops: Array<() => void> = [];
+    const chain = {
+      lpush: (key: string, value: string) => {
+        ops.push(() => this.lists.set(key, [value, ...(this.lists.get(key) ?? [])]));
+        return chain;
+      },
+      ltrim: (key: string, start: number, stop: number) => {
+        ops.push(() => this.lists.set(key, (this.lists.get(key) ?? []).slice(start, stop + 1)));
+        return chain;
+      },
+      publish: () => chain,
+      exec: async () => {
+        for (const op of ops) op();
+        return [];
+      },
+    };
+    return chain;
+  }
+
+  resetSeq(boardId: string) {
+    this.kv.delete(`board:${boardId}:seq`);
+  }
+}

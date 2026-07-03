@@ -36,7 +36,7 @@ export function TaskBoard() {
   const { effectiveFilters, clear, hasActiveFilters } = useTaskFilters();
   const { data, isLoading, isError, error, refetch } = useTasks(effectiveFilters);
   const { statuses, isLoading: statusesLoading } = useStatuses();
-  const { update } = useTaskMutations();
+  const { move } = useTaskMutations();
   const [activeTask, setActiveTask] = useState<TaskDTO | null>(null);
 
   // Per-session focus chrome (not query state): a set of collapsed status ids. Empty = all expanded.
@@ -62,8 +62,8 @@ export function TaskBoard() {
     setActiveTask(data?.items.find((task) => task.id === id) ?? null);
   };
 
-  // DnD is just another trigger for the existing update mutation (optimistic re-bucket + rollback are
-  // handled there — no second write path). A drop onto the same column is a no-op.
+  // DnD writes status + position through the move mutation. In-column reordering is not exposed yet;
+  // dropping on a column appends to that column's current tail.
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveTask(null);
     const { active, over } = event;
@@ -71,7 +71,9 @@ export function TaskBoard() {
     const from = active.data.current?.statusId as string | undefined;
     const to = (over.data.current?.statusId ?? over.id) as string;
     if (!to || to === from) return;
-    update.mutate({ id: String(active.id), patch: { statusId: to } });
+    const targetTasks = data?.items.filter((task) => task.statusId === to) ?? [];
+    const position = targetTasks.reduce((max, task) => Math.max(max, task.position), -1) + 1;
+    move.mutate({ id: String(active.id), statusId: to, position });
   };
 
   if (isLoading || statusesLoading) {
@@ -117,7 +119,10 @@ export function TaskBoard() {
   }
 
   const statusIds = statuses.map((status) => status.id);
-  const grouped = groupByStatus(tasks, statusIds);
+  const grouped = groupByStatus(
+    [...tasks].sort((a, b) => a.position - b.position),
+    statusIds,
+  );
 
   // Safeguard: a task pointing at a status not in the current list (e.g. a stale cache after a status
   // change) would otherwise disappear. Collect any such orphans into a trailing "Unsorted" column so

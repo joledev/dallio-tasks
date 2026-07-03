@@ -161,6 +161,15 @@ reviewer vetoes the widening.
 **Consequence.** The set grows by one, exhaustiveness still enforced by the `Record<ErrorCode, …>`
 maps in `respond.ts` and `_lib/errors.ts` (both updated). No caller emits it yet — wired from L3.
 
+### ADR-023 — SSE fan-out needs no sticky sessions (L2b)
+**Context.** Live editing uses browser `EventSource` streams, but app pods are stateless and
+Redis already owns cross-pod pub/sub plus the replay log from L2a.
+**Decision.** SSE handlers subscribe through the `eventBus` port, replay by `Last-Event-ID`, and
+then stream live Redis pub/sub events. Do not require ingress sticky sessions.
+**Consequence.** Any reconnect can land on any pod and still recover missed events from Redis. The
+trade-off is replay-log boundedness; a cursor inversion forces a refresh/resnapshot instead of
+silently losing changes.
+
 ---
 
 ## Known trade-offs (deferred on purpose)

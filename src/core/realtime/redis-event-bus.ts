@@ -17,6 +17,7 @@ export class RedisEventBus implements EventBus {
   constructor(private readonly client: Redis = redis) {}
 
   async publish(boardId: string, event: NewBoardEvent): Promise<BoardEvent> {
+    await this.client.set(seqKey(boardId), String(Date.now()), 'NX');
     const id = String(await this.client.incr(seqKey(boardId)));
     const full = { ...event, id } as BoardEvent;
     const json = JSON.stringify(full);
@@ -58,5 +59,9 @@ export class RedisEventBus implements EventBus {
       .map((r) => JSON.parse(r) as BoardEvent)
       .filter((e) => Number(e.id) > after)
       .sort((a, b) => Number(a.id) - Number(b.id)); // oldest-first for replay
+  }
+
+  async getCurrentSeq(boardId: string): Promise<string | null> {
+    return this.client.get(seqKey(boardId));
   }
 }

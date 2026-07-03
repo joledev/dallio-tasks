@@ -1,6 +1,11 @@
 import type { ErrorCode, Result } from '@/core/shared/envelope';
 import { MAX_PAGE_SIZE } from '@/core/shared/pagination';
-import type { CreateTaskInput, UpdateTaskInput, AssignTaskInput } from '@/core/tasks/schema';
+import type {
+  CreateTaskInput,
+  UpdateTaskInput,
+  MoveTaskInput,
+  AssignTaskInput,
+} from '@/core/tasks/schema';
 import type { CreateStatusInput } from '@/core/statuses/schema';
 import type { JoinBoardInput } from '@/core/participants/schema';
 import type { TaskDTO, UserDTO, StatusDTO, GuestParticipantDTO, Paginated } from './types';
@@ -81,6 +86,9 @@ export const api = {
   updateTask: (id: string, body: UpdateTaskInput) =>
     request<TaskDTO>(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
+  moveTask: (id: string, body: MoveTaskInput) =>
+    request<TaskDTO>(`/api/tasks/${id}/move`, { method: 'PATCH', body: JSON.stringify(body) }),
+
   deleteTask: (id: string) => request<null>(`/api/tasks/${id}`, { method: 'DELETE' }),
 
   assignTask: (id: string, body: AssignTaskInput) =>
@@ -126,6 +134,12 @@ export function boardApi(token: string) {
 
     updateTask: (id: string, body: UpdateTaskInput) =>
       request<TaskDTO>(`${base}/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+    moveTask: (id: string, body: MoveTaskInput) =>
+      request<TaskDTO>(`${base}/tasks/${id}/move`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
 
     deleteTask: (id: string) => request<null>(`${base}/tasks/${id}`, { method: 'DELETE' }),
 
