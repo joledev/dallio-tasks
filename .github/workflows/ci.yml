@@ -62,6 +62,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Voting cut-check
+        run: pnpm check:voting-cut
+
       - name: Typecheck
         run: pnpm typecheck
 

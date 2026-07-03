@@ -5,6 +5,7 @@ import { ViewToggle } from '@/app/_components/view-toggle';
 import { TaskTable } from '@/app/_components/task-table/task-table';
 import { TaskBoard } from '@/app/_components/task-board/task-board';
 import { ActivityFeed } from '@/app/_components/activity-feed';
+import { BoardModeToggle, ProposalsPanel } from '@/app/_components/proposals-panel';
 import { PresenceStrip } from '@/app/_components/presence-strip';
 import { useTaskFilters } from '@/app/_hooks/use-task-filters';
 
@@ -19,7 +20,10 @@ export function BoardView({ boardName }: { boardName: string }) {
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{boardName}</h1>
-        <ViewToggle />
+        <div className="flex items-center gap-2">
+          <BoardModeToggle />
+          <ViewToggle />
+        </div>
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -28,7 +32,10 @@ export function BoardView({ boardName }: { boardName: string }) {
           <FilterBar />
           {view === 'board' ? <TaskBoard /> : <TaskTable />}
         </div>
-        <ActivityFeed />
+        <div className="space-y-4">
+          <ProposalsPanel />
+          <ActivityFeed />
+        </div>
       </div>
     </div>
   );

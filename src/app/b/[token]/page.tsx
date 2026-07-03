@@ -32,7 +32,12 @@ export default async function BoardPage({ params }: Params) {
   }
 
   return (
-    <BoardProvider boardId={board.id} token={token} participant={participant}>
+    <BoardProvider
+      boardId={board.id}
+      token={token}
+      initialMode={board.mode}
+      participant={participant}
+    >
       <BoardScreen boardName={board.name} />
     </BoardProvider>
   );

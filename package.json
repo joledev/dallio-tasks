@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:voting-cut": "node scripts/check-voting-cut.mjs",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

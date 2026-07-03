@@ -13,12 +13,37 @@ export type BoardEventType =
   | 'task.deleted'
   | 'participant.joined'
   | 'participant.left'
-  | 'activity.appended';
+  | 'activity.appended'
+  | 'proposal.created'
+  | 'proposal.updated'
+  | 'proposal.applied';
 
 // participant.joined/left carry the public participant + the current online count (spec §3.2).
 export type ParticipantPresence = {
   participant: PublicParticipant;
   onlineCount: number;
+};
+
+export type ProposalEventData = {
+  id: string;
+  boardId: string;
+  kind: string;
+  targetTaskId: string | null;
+  payload: unknown;
+  targetVersion: string | null;
+  status: 'PENDING' | 'APPLIED' | 'REJECTED';
+  meta: unknown | null;
+  createdByParticipantId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  votes: Array<{
+    id: string;
+    proposalId: string;
+    participantId: string;
+    value: 'APPROVE' | 'REJECT';
+    createdAt: string;
+    updatedAt: string;
+  }>;
 };
 
 // Fields the bus stamps onto every emitted event. `id` is the per-board monotonic seq (Redis INCR),
@@ -39,7 +64,10 @@ export type BoardEvent =
   | (BoardEventEnvelope & { type: 'task.deleted'; data: { id: string } })
   | (BoardEventEnvelope & { type: 'participant.joined'; data: ParticipantPresence })
   | (BoardEventEnvelope & { type: 'participant.left'; data: ParticipantPresence })
-  | (BoardEventEnvelope & { type: 'activity.appended'; data: ActivityDTO });
+  | (BoardEventEnvelope & { type: 'activity.appended'; data: ActivityDTO })
+  | (BoardEventEnvelope & { type: 'proposal.created'; data: ProposalEventData })
+  | (BoardEventEnvelope & { type: 'proposal.updated'; data: ProposalEventData })
+  | (BoardEventEnvelope & { type: 'proposal.applied'; data: ProposalEventData });
 
 // Distributive Omit so `NewBoardEvent` stays a union (one arm per `type`), not a collapsed shape.
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -93,3 +121,21 @@ export const activityAppended = (
   actorId: string | null,
   activity: ActivityDTO,
 ): NewBoardEvent => ({ type: 'activity.appended', boardId, actorId, ts: now(), data: activity });
+
+export const proposalCreated = (
+  boardId: string,
+  actorId: string | null,
+  proposal: ProposalEventData,
+): NewBoardEvent => ({ type: 'proposal.created', boardId, actorId, ts: now(), data: proposal });
+
+export const proposalUpdated = (
+  boardId: string,
+  actorId: string | null,
+  proposal: ProposalEventData,
+): NewBoardEvent => ({ type: 'proposal.updated', boardId, actorId, ts: now(), data: proposal });
+
+export const proposalApplied = (
+  boardId: string,
+  actorId: string | null,
+  proposal: ProposalEventData,
+): NewBoardEvent => ({ type: 'proposal.applied', boardId, actorId, ts: now(), data: proposal });
