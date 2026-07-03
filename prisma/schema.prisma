@@ -9,12 +9,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Status {
-  TODO
-  IN_PROGRESS
-  DONE
-}
-
 enum Priority {
   LOW
   MEDIUM
@@ -29,24 +23,44 @@ model User {
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
-  ownedTasks    Task[] @relation("TaskOwner")
-  assignedTasks Task[] @relation("TaskAssignee")
+  ownedTasks    Task[]   @relation("TaskOwner")
+  assignedTasks Task[]   @relation("TaskAssignee")
+  statuses      Status[]
+}
+
+model Status {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid // scope + authz anchor (→ boardId in Fase 2)
+  name      String // display: "Staging"
+  slug      String // stable key: "staging" (server-derived, dedupe)
+  position  Int // column order; append-on-create
+  color     String? // palette TOKEN, null → neutral
+  isDefault Boolean  @default(false) // the status new tasks receive (one per owner)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([ownerId, slug]) // dedupe within scope
+  @@index([ownerId, position]) // list ordered by column position
 }
 
 model Task {
   id          String   @id @default(uuid()) @db.Uuid
   title       String
   description String?
-  status      Status   @default(TODO) // DB-level belt; the use-case also sets TODO server-side
+  statusId    String   @db.Uuid // FK → Status (was: status Status @default(TODO))
   priority    Priority @default(MEDIUM)
   ownerId     String   @db.Uuid // authorization anchor for every task-by-id operation
   assigneeId  String?  @db.Uuid // nullable assignment
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
-  owner    User  @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  assignee User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  owner    User   @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  assignee User?  @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  status   Status @relation(fields: [statusId], references: [id], onDelete: Restrict) // BLOCK delete-in-use
 
   @@index([ownerId, createdAt]) // owner-scoped list, default sort
-  @@index([ownerId, status]) // owner-scoped status filter
+  @@index([ownerId, statusId]) // owner-scoped status filter (replaces [ownerId, status])
 }
