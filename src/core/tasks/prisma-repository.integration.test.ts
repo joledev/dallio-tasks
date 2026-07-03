@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/core/shared/prisma';
+import type { Actor } from '@/core/shared/actor';
 import { PrismaStatusRepository } from '@/core/statuses/prisma-repository';
+import { PrismaParticipantRepository } from '@/core/participants/prisma-repository';
+import { assignTask } from './use-cases';
 import { PrismaTaskRepository } from './prisma-repository';
 
 // --- DB guard: if Postgres is unreachable, skip the whole suite cleanly (no red). ---
@@ -18,6 +21,7 @@ const dbUp = await canConnect();
 
 const repo = new PrismaTaskRepository();
 const statusRepo = new PrismaStatusRepository();
+const participantRepo = new PrismaParticipantRepository();
 const USER_A = randomUUID();
 const USER_B = randomUUID();
 const BOARD_A = randomUUID();
@@ -204,5 +208,53 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
 
     // B (the real owner board) can read it.
     expect(await repo.get(bTask.id, BOARD_B)).not.toBeNull();
+  });
+
+  // --- L1c-b contract proofs ---------------------------------------------------------------------
+
+  it('post-contract: a Task insert WITHOUT boardId is rejected (boardId NOT NULL)', async () => {
+    // Raw INSERT that omits boardId — proves the DB-level NOT NULL added by fase2_boards_contract.
+    // (The typed create() can no longer even express a missing boardId.)
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO "Task" ("id", "title", "statusId", "updatedAt")
+        VALUES (${randomUUID()}::uuid, 'no-board', ${aStatus.todo}::uuid, now())`,
+    ).rejects.toThrow();
+  });
+
+  it('post-contract: a Status insert WITHOUT boardId is rejected (boardId NOT NULL)', async () => {
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO "Status" ("id", "name", "slug", "position", "updatedAt")
+        VALUES (${randomUUID()}::uuid, 'No board', 'no_board', 0, now())`,
+    ).rejects.toThrow();
+  });
+
+  it('assign via a same-board Participant still works (H1 path intact)', async () => {
+    const alice = await participantRepo.create({
+      boardId: BOARD_A,
+      displayName: 'Alice',
+      color: null,
+      sessionTokenHash: `hash-${randomUUID()}`,
+    });
+    const task = await prisma.task.findFirstOrThrow({
+      where: { boardId: BOARD_A, title: 'Task-00' },
+    });
+    const actorA: Actor = { boardId: BOARD_A, participantId: alice.id };
+
+    const res = await assignTask(repo, participantRepo, actorA, task.id, {
+      assigneeParticipantId: alice.id,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data.assigneeParticipantId).toBe(alice.id);
+
+    // Unassign round-trips back to null.
+    const cleared = await assignTask(repo, participantRepo, actorA, task.id, {
+      assigneeParticipantId: null,
+    });
+    expect(cleared.ok).toBe(true);
+    if (cleared.ok) expect(cleared.data.assigneeParticipantId).toBeNull();
+
+    await prisma.participant.delete({ where: { id: alice.id } });
   });
 });

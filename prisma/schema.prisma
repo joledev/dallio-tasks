@@ -92,10 +92,8 @@ model Activity {
 
 model Status {
   id        String   @id @default(uuid()) @db.Uuid
-  // ownerId column REMAINS in the DB until L1c (intentional schema↔DB drift — no migration in L1b);
-  // the field + owner relation + owner-scoped indexes are dropped from the schema so the client stops
-  // selecting/writing them.
-  boardId   String?  @db.Uuid // Fase 2 board scope (nullable in expand; SET NOT NULL in L1c). App enforces non-null.
+  // ownerId column was dropped in L1c-b (fase2_boards_contract), along with its owner-scoped indexes.
+  boardId   String   @db.Uuid // Fase 2 board scope — NOT NULL since L1c-b.
   name      String // display: "Staging"
   slug      String // stable key: "staging" (server-derived, dedupe)
   position  Int // column order; append-on-create
@@ -104,7 +102,7 @@ model Status {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  board Board? @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   tasks Task[]
 
   @@unique([boardId, slug]) // Fase 2 dedupe within board scope (protects L1b board-scoped writes)
@@ -118,9 +116,8 @@ model Task {
   description            String?
   statusId               String   @db.Uuid // FK → Status (was: status Status @default(TODO))
   priority               Priority @default(MEDIUM)
-  // ownerId column REMAINS in the DB until L1c (intentional schema↔DB drift — no migration in L1b);
-  // the field + owner relation + owner-scoped indexes are dropped so the client stops selecting it.
-  boardId                String?  @db.Uuid // Fase 2 board scope (nullable in expand; SET NOT NULL in L1c-b). App enforces non-null.
+  // ownerId + assigneeId columns were dropped in L1c-b (fase2_boards_contract); their indexes/FKs too.
+  boardId                String   @db.Uuid // Fase 2 board scope — NOT NULL since L1c-b.
   createdByParticipantId String?  @db.Uuid // Fase 2 attribution (guest who created the task)
   assigneeParticipantId  String?  @db.Uuid // Fase 2 assignment (→Participant; same-board check in L1b)
   position               Int      @default(0) // DnD order within a status column (used from L2b)
@@ -128,9 +125,11 @@ model Task {
   updatedAt              DateTime @updatedAt @db.Timestamptz(6)
 
   status              Status       @relation(fields: [statusId], references: [id], onDelete: Restrict) // BLOCK delete-in-use
-  board               Board?       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board               Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
   createdBy           Participant? @relation("TaskCreatedBy", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
   assigneeParticipant Participant? @relation("TaskAssigneeParticipant", fields: [assigneeParticipantId], references: [id], onDelete: SetNull)
 
   @@index([assigneeParticipantId]) // L1b-guest (fase2_guest_indexes): H1 assignment lookups
+  @@index([boardId, statusId]) // L1c-b: board-scoped list path (replaces Task_ownerId_statusId_idx)
+  @@index([boardId, createdAt]) // L1c-b: board-scoped list path (replaces Task_ownerId_createdAt_idx)
 }

@@ -88,9 +88,17 @@ log "Migration complete."
 log "Applying app manifests (Deployment / Service / Ingress)"
 ssh "$REMOTE" "kubectl apply -f -" < "$RENDERED"
 
-# A failed rollout rolls back to the previous ReplicaSet rather than leaving it wedged.
+# A failed rollout normally rolls back to the previous ReplicaSet rather than leaving it wedged.
+# For a DESTRUCTIVE migration (columns already dropped), an image auto-undo can land the old image on
+# the new schema — so DESTRUCTIVE_MIGRATION=1 disables auto-undo and stops for a human instead.
 log "Waiting for rollout of deploy/dallio-tasks"
 if ! kc -n "$NAMESPACE" rollout status deploy/dallio-tasks --timeout="$ROLLOUT_TIMEOUT"; then
+  if [ "${DESTRUCTIVE_MIGRATION:-0}" = "1" ]; then
+    echo "ERROR: rollout failed after a DESTRUCTIVE migration — NOT auto-undoing." >&2
+    echo "       Recover with: git revert + a forward compensating migration (do NOT roll the image" >&2
+    echo "       back onto the migrated schema). See docs/DECISIONS.md." >&2
+    exit 1
+  fi
   echo "ERROR: rollout failed — rolling back." >&2
   kc -n "$NAMESPACE" rollout undo deploy/dallio-tasks || true
   kc -n "$NAMESPACE" rollout status deploy/dallio-tasks --timeout="$ROLLOUT_TIMEOUT" || true
