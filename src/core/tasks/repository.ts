@@ -1,12 +1,13 @@
+import type { Prisma } from '@prisma/client';
 import type { Task } from './task';
-import type { TaskStatus, TaskPriority, TASK_SORT_FIELDS } from './schema';
+import type { TaskPriority, TASK_SORT_FIELDS } from './schema';
 
 export type TaskSortField = (typeof TASK_SORT_FIELDS)[number];
 type SortDir = 'asc' | 'desc';
 
 export type TaskFilter = {
   ownerId: string; // ALWAYS applied — the IDOR anchor
-  status?: TaskStatus;
+  statusId?: string;
   priority?: TaskPriority;
   assigneeId?: string;
   q?: string; // title contains, case-insensitive
@@ -23,13 +24,27 @@ export type TaskListParams = {
 export type CreateTaskData = {
   title: string;
   description: string | null;
-  status: TaskStatus; // status server-set
+  statusId: string; // resolved server-side (default or scope-checked)
   priority: TaskPriority;
   ownerId: string;
   assigneeId: string | null;
 };
 
 export type UpdateTaskData = Partial<Omit<CreateTaskData, 'ownerId'>>;
+
+// Sort allowlist as an injection-safe order-by builder: each domain field maps to a FIXED structured
+// Prisma orderBy. `status` orders by the joined Status.position (not the removed enum). Zod restricts
+// `sort` to TASK_SORT_FIELDS, so no user string ever reaches a column identifier. Prisma types live at
+// this repo boundary only.
+export const TASK_ORDER_BY: Record<
+  TaskSortField,
+  (dir: SortDir) => Prisma.TaskOrderByWithRelationInput
+> = {
+  createdAt: (dir) => ({ createdAt: dir }),
+  priority: (dir) => ({ priority: dir }),
+  title: (dir) => ({ title: dir }),
+  status: (dir) => ({ status: { position: dir } }),
+};
 
 // ISP: tasks only. get/update/delete require ownerId — ownership is enforced in-query, never as a
 // post-fetch check. A miss (wrong owner OR nonexistent) is indistinguishable → maps to 404.

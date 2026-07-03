@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/core/shared/prisma';
+import { PrismaStatusRepository } from '@/core/statuses/prisma-repository';
 import { PrismaTaskRepository } from './prisma-repository';
 
 // --- DB guard: if Postgres is unreachable, skip the whole suite cleanly (no red). ---
@@ -16,10 +17,35 @@ async function canConnect(): Promise<boolean> {
 const dbUp = await canConnect();
 
 const repo = new PrismaTaskRepository();
+const statusRepo = new PrismaStatusRepository();
 const OWNER_A = randomUUID();
 const OWNER_B = randomUUID();
 
+// Seed the canonical statuses per owner; returns slug → id for that owner.
+async function seedStatuses(ownerId: string) {
+  const todo = await statusRepo.create({
+    ownerId,
+    name: 'To do',
+    slug: 'todo',
+    position: 0,
+    color: null,
+    isDefault: true,
+  });
+  const done = await statusRepo.create({
+    ownerId,
+    name: 'Done',
+    slug: 'done',
+    position: 2,
+    color: 'green',
+    isDefault: false,
+  });
+  return { todo: todo.id, done: done.id };
+}
+
 describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', () => {
+  let aStatus: { todo: string; done: string };
+  let bStatus: { todo: string; done: string };
+
   beforeAll(async () => {
     await prisma.user.createMany({
       data: [
@@ -27,12 +53,14 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
         { id: OWNER_B, email: `b-${OWNER_B}@it.local`, name: 'Owner B' },
       ],
     });
-    // Owner A: 25 tasks Task-00..Task-24, first 10 DONE, rest TODO; two HIGH priority.
+    aStatus = await seedStatuses(OWNER_A);
+    bStatus = await seedStatuses(OWNER_B);
+    // Owner A: 25 tasks Task-00..Task-24, first 10 done, rest todo; two HIGH priority.
     for (let i = 0; i < 25; i++) {
       await repo.create({
         title: `Task-${String(i).padStart(2, '0')}`,
         description: null,
-        status: i < 10 ? 'DONE' : 'TODO',
+        statusId: i < 10 ? aStatus.done : aStatus.todo,
         priority: i < 2 ? 'HIGH' : 'MEDIUM',
         ownerId: OWNER_A,
         assigneeId: null,
@@ -42,7 +70,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
     await repo.create({
       title: 'B-secret',
       description: null,
-      status: 'TODO',
+      statusId: bStatus.todo,
       priority: 'LOW',
       ownerId: OWNER_B,
       assigneeId: null,
@@ -50,14 +78,16 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
   });
 
   afterAll(async () => {
-    // Cascade deletes the owned tasks (FK onDelete: Cascade).
+    // Delete tasks first (Task.statusId is onDelete: Restrict), then statuses, then users.
+    await prisma.task.deleteMany({ where: { ownerId: { in: [OWNER_A, OWNER_B] } } });
+    await prisma.status.deleteMany({ where: { ownerId: { in: [OWNER_A, OWNER_B] } } });
     await prisma.user.deleteMany({ where: { id: { in: [OWNER_A, OWNER_B] } } });
     await prisma.$disconnect();
   });
 
-  it('filters by status in SQL and counts only the filtered set', async () => {
+  it('filters by statusId in SQL and counts only the filtered set', async () => {
     const { items, total } = await repo.list({
-      filter: { ownerId: OWNER_A, status: 'DONE' },
+      filter: { ownerId: OWNER_A, statusId: aStatus.done },
       sort: 'title',
       dir: 'asc',
       offset: 0,
@@ -65,7 +95,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
     });
     expect(total).toBe(10);
     expect(items).toHaveLength(10);
-    expect(items.every((t) => t.status === 'DONE')).toBe(true);
+    expect(items.every((t) => t.status.slug === 'done')).toBe(true);
   });
 
   it('paginates via LIMIT/OFFSET: page 1 not skipped, filtered total intact', async () => {
