@@ -75,7 +75,9 @@ function BoardInvite({ board }: { board: BoardDTO }) {
         )}
       </div>
       <div className="min-w-0 space-y-2">
-        <p className="text-muted-foreground truncate text-xs">{url || 'Preparing invite link'}</p>
+        {/* break-all (not truncate): a nowrap URL sets the grid track's min-content width and pushes the
+            whole card — and the page — wider than a phone screen. Wrapping keeps the dashboard in-bounds. */}
+        <p className="text-muted-foreground text-xs break-all">{url || 'Preparing invite link'}</p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" className="min-h-11" asChild>
             <Link href={`${href}/present`}>
@@ -299,7 +301,7 @@ function BoardRequestsDialog({
                   type="button"
                   size="icon"
                   variant="outline"
-                  className="min-h-9 min-w-9"
+                  className="min-h-11 min-w-11"
                   disabled={resolve.isPending}
                   aria-label="Approve request"
                   onClick={() => resolve.mutate({ id: request.id, action: 'approve' })}
@@ -310,7 +312,7 @@ function BoardRequestsDialog({
                   type="button"
                   size="icon"
                   variant="outline"
-                  className="min-h-9 min-w-9"
+                  className="min-h-11 min-w-11"
                   disabled={resolve.isPending}
                   aria-label="Reject request"
                   onClick={() => resolve.mutate({ id: request.id, action: 'reject' })}
@@ -334,7 +336,8 @@ function BoardCard({ board }: { board: BoardDTO }) {
   const [requestsOpen, setRequestsOpen] = useState(false);
 
   return (
-    <Card>
+    // min-w-0: let this grid item shrink below its content width so a long child can't widen the row.
+    <Card className="min-w-0">
       <CardHeader>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
