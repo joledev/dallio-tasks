@@ -8,8 +8,10 @@ test('dashboard happy path across table and board views', async ({ page }) => {
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Dallio Tasks' })).toBeVisible();
-  await expect(page.getByText('Set up local Postgres')).toBeVisible();
-  await expect(page.getByText('Draft the REST API')).toBeVisible();
+  // Table view renders the md+ table AND the mobile card list (one hidden per breakpoint), so a plain
+  // getByText matches two nodes — scope to the visible table row.
+  await expect(page.getByRole('row').filter({ hasText: 'Set up local Postgres' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Draft the REST API' })).toBeVisible();
 
   await page.getByRole('button', { name: 'New task' }).click();
   const dialog = page.getByRole('dialog');
@@ -17,7 +19,7 @@ test('dashboard happy path across table and board views', async ({ page }) => {
   await dialog.getByPlaceholder('Task title').fill(uniqueTitle);
   await dialog.getByRole('button', { name: 'Create task' }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.getByText(uniqueTitle)).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: uniqueTitle })).toBeVisible();
 
   await page.screenshot({ path: '.dev/logs/ui-table.png', fullPage: false });
 
@@ -25,7 +27,7 @@ test('dashboard happy path across table and board views', async ({ page }) => {
   await page.getByRole('option', { name: 'High' }).click();
   await expect(page).toHaveURL(/priority=HIGH/);
   // The new task and 'Draft the REST API' are MEDIUM, so only the HIGH seed survives the filter.
-  await expect(page.getByText('Set up local Postgres')).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Set up local Postgres' })).toBeVisible();
   await expect(page.getByText(uniqueTitle)).toHaveCount(0);
   await expect(page.getByText('Draft the REST API')).toHaveCount(0);
 
@@ -41,7 +43,7 @@ test('dashboard happy path across table and board views', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Clear' }).click();
   await expect(page).not.toHaveURL(/priority=HIGH/);
-  await expect(page.getByText(uniqueTitle)).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: uniqueTitle })).toBeVisible();
 
   // Wait on the real POST /assign so we assert server persistence, not just the optimistic cache
   // patch, and don't race the browser-context close before the write lands.
