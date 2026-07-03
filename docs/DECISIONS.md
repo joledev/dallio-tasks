@@ -138,6 +138,29 @@ revisit 7 once the adapter story settles.
 **Consequence.** Fewer unknowns on a fixed timeline and a clean standalone Docker build.
 The App Router code ports forward with little friction when 16 is worth it.
 
+### ADR-021 — Redis real-time via lazy-connect singleton + port seam (L2a)
+**Context.** The collab layer needs a broker for live fan-out. Importing a Redis client at
+build/boot must never open a socket (tests, `tsc`, `next build`, and app boot all run with no
+live Redis), and an outage must degrade real-time, not crash the app.
+**Decision.** One `ioredis` construction in `core/realtime/redis.ts` with `lazyConnect: true`,
+HMR-safe like `prisma.ts`, plus an `'error'` listener so an outage can't surface as an unhandled
+EventEmitter error. The app imports only the `{ eventBus, rateLimiter }` PORTS from
+`core/realtime/container.ts`; an ESLint boundary bars `app/**` from `ioredis`,
+`@/core/realtime/redis`, and `@/core/**/redis-*`. Bus = pub/sub + capped list (`INCR seq` +
+`LPUSH`/`LTRIM 0 998` + `PUBLISH`), **not** Redis Streams; `RateLimiter` is a thin port.
+**Consequence.** Belt (lazyConnect) + suspenders (lint) keep the seam provable. Ephemeral state
+by design: k8s runs one `emptyDir` Redis with `strategy: Recreate` (a rolling update would
+split-brain two empty datasets); a restart resets counters, tolerated by the L2b ms-seeded seq.
+
+### ADR-022 — `RATE_LIMITED` widens the envelope's closed error set (L2a)
+**Context.** The `RateLimiter` port needs an HTTP-429 error code. Custom-statuses deliberately
+kept `ErrorCode` frozen, so adding a member is a conscious divergence.
+**Decision.** Add `RATE_LIMITED` → HTTP 429 to the closed `ErrorCode` set (and its user-facing
+copy). Semantically correct for rate limiting; `CONFLICT` (409) is the weaker fallback if a
+reviewer vetoes the widening.
+**Consequence.** The set grows by one, exhaustiveness still enforced by the `Record<ErrorCode, …>`
+maps in `respond.ts` and `_lib/errors.ts` (both updated). No caller emits it yet — wired from L3.
+
 ---
 
 ## Known trade-offs (deferred on purpose)

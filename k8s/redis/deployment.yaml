@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app.kubernetes.io/name: dallio-tasks
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  # Recreate (not RollingUpdate): with a single emptyDir replica, a rolling update would briefly run
+  # TWO redis pods with independent empty datasets → split-brain (two seq counters, two presence sets).
+  # Recreate tears the old pod down first — one authoritative Redis at a time. State reset on restart
+  # is handled by the L2b ms-seeded seq design.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dallio-tasks
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dallio-tasks
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine # public Docker Hub → no ghcr-pull change, no new secret
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Ephemeral working dir; no PVC — realtime state is disposable by design.
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

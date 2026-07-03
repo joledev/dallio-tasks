@@ -5,6 +5,7 @@ export type ErrorCode =
   | 'FORBIDDEN'
   | 'CONFLICT'
   | 'LIMIT_EXCEEDED'
+  | 'RATE_LIMITED'
   | 'INTERNAL';
 
 export type Ok<T> = { ok: true; data: T };
