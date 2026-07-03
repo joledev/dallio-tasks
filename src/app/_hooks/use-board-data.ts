@@ -46,12 +46,12 @@ export function useBoardTaskMutations(token: string) {
 // participants concept), so this is its own token-scoped query rather than a wrapper.
 export function useBoardParticipants(token: string) {
   const board = useAssertedBoard(token);
-  return useQuery(boardParticipantsQueryOptions(token, board.isJoined));
+  return useQuery(boardParticipantsQueryOptions(token, board.isJoined, board.present));
 }
 
 export function useBoardPresence(token: string) {
   const board = useAssertedBoard(token);
-  const query = useQuery(boardPresenceQueryOptions(token, board.isJoined));
+  const query = useQuery(boardPresenceQueryOptions(token, board.isJoined, board.present));
   return {
     ...query,
     participants: query.data?.participants ?? [],
@@ -61,6 +61,6 @@ export function useBoardPresence(token: string) {
 
 export function useBoardActivity(token: string) {
   const board = useAssertedBoard(token);
-  const query = useQuery(boardActivityQueryOptions(token, board.isJoined));
+  const query = useQuery(boardActivityQueryOptions(token, board.isJoined, board.present));
   return { ...query, activity: query.data ?? [] };
 }

@@ -18,6 +18,7 @@ export type BoardContextValue = {
   token: string;
   participant: GuestParticipantDTO | null;
   isJoined: boolean;
+  present?: boolean;
 };
 
 const BoardContext = createContext<BoardContextValue | null>(null);
@@ -39,19 +40,21 @@ export function BoardProvider({
   boardId,
   token,
   participant,
+  present = false,
   children,
 }: {
   boardId: string;
   token: string;
   participant: GuestParticipantDTO | null;
+  present?: boolean;
   children: React.ReactNode;
 }) {
   const queryClient = useQueryClient();
   const isJoined = participant !== null;
 
   const value = useMemo<BoardContextValue>(
-    () => ({ boardId, token, participant, isJoined }),
-    [boardId, token, participant, isJoined],
+    () => ({ boardId, token, participant, isJoined, present }),
+    [boardId, token, participant, isJoined, present],
   );
 
   // UI-H2 — on a server-confirmed `!isJoined` (pre-join, expiry, cookie deletion, or an A→B navigation
@@ -62,7 +65,7 @@ export function BoardProvider({
     if (!isJoined) queryClient.removeQueries({ queryKey: boardKeys(token) });
   }, [isJoined, token, queryClient]);
 
-  useBoardStream(token, isJoined);
+  useBoardStream(token, isJoined, present);
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
 }

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
-import { resetDatabase, SEED_BOARD_ID } from '../prisma/seed-data';
+import { resetDatabase, SEED_BOARD_ID, SEED_BOARD_TOKEN } from '../prisma/seed-data';
 
 // End-to-end coverage for the custom-statuses + mobile-UI feature.
 //
@@ -25,6 +25,17 @@ async function resetAndPrune(): Promise<void> {
 
 test.beforeEach(resetAndPrune);
 test.afterAll(resetAndPrune);
+
+async function openDemoBoard(page: Page) {
+  await page.goto(`/b/${SEED_BOARD_TOKEN}`);
+  const dialog = page.getByRole('dialog');
+  if (await dialog.isVisible().catch(() => false)) {
+    await dialog.getByLabel('Display name').fill('E2E Statuses');
+    await dialog.getByRole('button', { name: 'Join board' }).click();
+    await expect(dialog).toBeHidden();
+  }
+  await expect(page.getByRole('heading', { name: 'My Board' })).toBeVisible();
+}
 
 // The dialog's main status trigger. Its aria-label is exactly "Status"; the inline color picker's is
 // "Status color", so we must match exactly to avoid a substring clash.
@@ -53,8 +64,7 @@ test('custom status: inline add → selectable → task lands on a new board col
 }) => {
   const title = `E2E staging task ${Date.now()}`;
 
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Dallio Tasks' })).toBeVisible();
+  await openDemoBoard(page);
   await expect(page.getByRole('row').filter({ hasText: 'Write the test matrix' })).toBeVisible();
 
   await openDialogAndAddStatus(page, 'Staging');
@@ -92,8 +102,7 @@ test('mobile: task list renders as cards at 390px with no horizontal page scroll
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Dallio Tasks' })).toBeVisible();
+  await openDemoBoard(page);
 
   // At <md the table is hidden and the card list (one <article> per task) is shown.
   const card = page.getByRole('article').filter({ hasText: 'Write the test matrix' });
@@ -122,7 +131,7 @@ test('mobile: task list renders as cards at 390px with no horizontal page scroll
 test('PRODUCT BUG: inline Add status in the task dialog auto-selects the new status (create-and-select)', async ({
   page,
 }) => {
-  await page.goto('/');
+  await openDemoBoard(page);
   await expect(page.getByRole('row').filter({ hasText: 'Write the test matrix' })).toBeVisible();
 
   await openDialogAndAddStatus(page, 'Staging');

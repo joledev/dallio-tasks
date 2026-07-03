@@ -53,10 +53,11 @@ export function boardStatusesQueryOptions(
 export function boardParticipantsQueryOptions(
   token: string,
   isJoined: boolean,
+  present = false,
 ): UseQueryOptions<GuestParticipantDTO[]> {
   return {
     queryKey: boardParticipantKeys(token).all,
-    queryFn: () => boardApi(token).listParticipants(),
+    queryFn: () => boardApi(token, present).listParticipants(),
     staleTime: 5 * 60_000,
     enabled: isJoined,
   };
@@ -65,10 +66,11 @@ export function boardParticipantsQueryOptions(
 export function boardPresenceQueryOptions(
   token: string,
   isJoined: boolean,
+  present = false,
 ): UseQueryOptions<PresenceSnapshotDTO> {
   return {
     queryKey: boardPresenceKeys(token).all,
-    queryFn: () => boardApi(token).presence(),
+    queryFn: () => boardApi(token, present).presence(),
     refetchInterval: 25_000,
     enabled: isJoined,
   };
@@ -77,10 +79,11 @@ export function boardPresenceQueryOptions(
 export function boardActivityQueryOptions(
   token: string,
   isJoined: boolean,
+  present = false,
 ): UseQueryOptions<ActivityDTO[]> {
   return {
     queryKey: boardActivityKeys(token).all,
-    queryFn: () => boardApi(token).activity(),
+    queryFn: () => boardApi(token, present).activity(),
     enabled: isJoined,
   };
 }
