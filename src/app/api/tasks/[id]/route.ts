@@ -4,6 +4,7 @@ import { resolveActingUserId } from '@/app/api/_shared/session';
 import { updateTaskSchema } from '@/core/tasks/schema';
 import { getTask, updateTask, deleteTask } from '@/core/tasks/use-cases';
 import { taskRepository } from '@/core/tasks/container';
+import { statusRepository } from '@/core/statuses/container';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -25,7 +26,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (!id.ok) return id;
     const parsed = parse(updateTaskSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return updateTask(taskRepository, auth.data, id.data, parsed.data);
+    return updateTask(taskRepository, statusRepository, auth.data, id.data, parsed.data);
   });
 }
 
