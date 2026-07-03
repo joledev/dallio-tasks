@@ -41,12 +41,6 @@ yarn-error.log*
 next-env.d.ts
 !.env.example
 
-# --- Proceso / orquestación (NO forma parte del entregable) ---
-.claude/
-.dev/
-process/
-graphify-out/
-*.agent.log
 
 # Playwright
 playwright-report/
