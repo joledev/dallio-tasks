@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { handle } from '@/app/api/_shared/respond';
+import { handleGuest } from '@/app/api/_shared/respond';
 import { parse } from '@/app/api/_shared/parse';
 import { resolveActor } from '@/app/api/_shared/session';
 import { guestCsrfCheck } from '@/app/api/_shared/guest';
@@ -13,7 +13,7 @@ import { boardRepository } from '@/core/boards/container';
 type Ctx = { params: Promise<{ token: string }> };
 
 export async function POST(req: Request, { params }: Ctx) {
-  return handle(async () => {
+  return handleGuest(async () => {
     const csrf = guestCsrfCheck(req); // H5
     if (!csrf.ok) return csrf;
     const actor = await resolveActor(
@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: Ctx) {
 }
 
 export async function GET(req: Request, { params }: Ctx) {
-  return handle(async () => {
+  return handleGuest(async () => {
     const actor = await resolveActor(
       boardRepository,
       participantRepository,

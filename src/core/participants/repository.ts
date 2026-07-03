@@ -14,4 +14,5 @@ export interface ParticipantRepository {
   getBySessionHash(hash: string): Promise<Participant | null>; // resolveActor lookup
   create(data: CreateParticipantData): Promise<Participant>; // join
   countByBoard(boardId: string): Promise<number>; // H2 per-board cap
+  listByBoard(boardId: string): Promise<Participant[]>; // participant picker / assignee filter source
 }

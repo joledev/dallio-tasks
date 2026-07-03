@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { respond } from '@/app/api/_shared/respond';
+import { respond, noStore } from '@/app/api/_shared/respond';
 import { parse } from '@/app/api/_shared/parse';
 import { guestCookie, guestCookieName, guestCsrfCheck } from '@/app/api/_shared/guest';
 import { ok, err } from '@/core/shared/envelope';
@@ -18,14 +18,14 @@ type Ctx = { params: Promise<{ token: string }> };
 export async function POST(req: Request, { params }: Ctx) {
   try {
     const csrf = guestCsrfCheck(req); // H5
-    if (!csrf.ok) return respond(csrf);
+    if (!csrf.ok) return noStore(respond(csrf));
 
     const shareToken = (await params).token;
     const store = await cookies();
     const existing = store.get(guestCookieName())?.value ?? null;
 
     const parsed = parse(joinBoardSchema, await req.json().catch(() => null), 'Invalid body');
-    if (!parsed.ok) return respond(parsed);
+    if (!parsed.ok) return noStore(respond(parsed));
 
     const result = await joinBoard(
       participantRepository,
@@ -34,20 +34,22 @@ export async function POST(req: Request, { params }: Ctx) {
       parsed.data,
       existing,
     );
-    if (!result.ok) return respond(result);
+    if (!result.ok) return noStore(respond(result));
 
     // Body carries the safe public participant only — the raw token stays out of the body (H6).
-    const res = respond(
-      ok({
-        participant: toPublicParticipant(result.data.participant),
-        boardId: result.data.actor.boardId,
-      }),
+    const res = noStore(
+      respond(
+        ok({
+          participant: toPublicParticipant(result.data.participant),
+          boardId: result.data.actor.boardId,
+        }),
+      ),
     );
     if (result.data.token) res.cookies.set(guestCookie(result.data.token)); // fresh join only
     return res;
   } catch (e) {
     const scrubbed = e as { name?: string; code?: string };
     logger.error({ err: { name: scrubbed?.name, code: scrubbed?.code } }, 'join route error');
-    return respond(err('INTERNAL', 'Internal error'), 500);
+    return noStore(respond(err('INTERNAL', 'Internal error'), 500));
   }
 }

@@ -38,4 +38,10 @@ export class InMemoryParticipantRepository implements ParticipantRepository {
   async countByBoard(boardId: string) {
     return this.rows.filter((p) => p.boardId === boardId).length;
   }
+
+  async listByBoard(boardId: string) {
+    return this.rows
+      .filter((p) => p.boardId === boardId)
+      .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
+  }
 }

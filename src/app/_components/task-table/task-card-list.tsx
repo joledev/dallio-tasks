@@ -38,6 +38,7 @@ export function TaskCardList({ items, className }: { items: TaskDTO[]; className
             <StatusSelect taskId={task.id} statusId={task.statusId} className="h-11! w-full" />
             <PrioritySelect taskId={task.id} priority={task.priority} className="h-11! w-full" />
             <AssignControl
+              taskId={task.id}
               assigneeParticipantId={task.assigneeParticipantId}
               className="h-11! w-full"
             />

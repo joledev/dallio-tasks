@@ -15,6 +15,8 @@ import { PriorityEnum, TASK_SORT_FIELDS, type TaskPriority } from '@/core/tasks/
 import { PRIORITY_LABEL, SORT_LABEL } from '@/app/_lib/labels';
 import { useTaskFilters } from '@/app/_hooks/use-task-filters';
 import { useStatuses } from '@/app/_hooks/use-statuses';
+import { useOptionalBoard } from '@/app/_components/board-context';
+import { BoardAssigneeFilter } from '@/app/_components/board-assignee-filter';
 import { TaskDialog } from './task-dialog';
 
 // Radix Select forbids an empty value, so "All" gets a sentinel that maps back to `undefined`.
@@ -23,6 +25,7 @@ const ALL = '__all__';
 export function FilterBar() {
   const { filters, view, set, clear, hasActiveFilters } = useTaskFilters();
   const { statuses } = useStatuses();
+  const board = useOptionalBoard();
   const [createOpen, setCreateOpen] = useState(false);
 
   // `q` is debounced in local state before it hits the URL (~300ms) so we don't push a history entry
@@ -101,10 +104,10 @@ export function FilterBar() {
         </SelectContent>
       </Select>
 
-      {/* Assignee filter removed for now: H1 repointed assignment to board Participants, but the
-          participant picker (and its name source) ships with the board view. A User-id filter here
-          would set `assigneeParticipantId=<User id>` and always match zero tasks, so it is hidden
-          until the UI pass wires it to participants. Status / priority / search stay fully working. */}
+      {/* Assignee filter — board variant only. On the guest board it lists this board's participants
+          and sets `assigneeParticipantId` in the URL query. The flat `/` surface has no participant
+          registry yet (L4a), so it stays hidden there — a User-id filter would match zero tasks. */}
+      {board ? <BoardAssigneeFilter /> : null}
 
       {/* Sort + direction share one cell so the icon toggle stays next to its select (the card list
           has no column headers — this is the sole sort affordance on mobile). */}

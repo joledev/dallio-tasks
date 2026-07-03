@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AssignControl } from '@/app/_components/assign-control';
+import { AssigneeText } from '@/app/_components/assignee-text';
 import { StatusBadge, PriorityBadge } from '@/app/_components/badges';
 import { DeleteTaskDialog } from '@/app/_components/delete-task-dialog';
 import { PrioritySelect } from '@/app/_components/priority-select';
@@ -88,11 +89,15 @@ export function TaskCard({ task }: { task: TaskDTO }) {
       <div className="mt-4 grid gap-2">
         <StatusSelect taskId={task.id} statusId={task.statusId} className="w-full" />
         <PrioritySelect taskId={task.id} priority={task.priority} className="w-full" />
-        <AssignControl assigneeParticipantId={task.assigneeParticipantId} className="w-full" />
+        <AssignControl
+          taskId={task.id}
+          assigneeParticipantId={task.assigneeParticipantId}
+          className="w-full"
+        />
       </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        {task.assigneeParticipantId ? 'Assigned' : 'Unassigned'}
+        <AssigneeText assigneeParticipantId={task.assigneeParticipantId} />
       </p>
 
       <TaskDialog mode="edit" task={task} open={editOpen} onOpenChange={setEditOpen} />
@@ -130,7 +135,7 @@ export function TaskCardOverlay({ task }: { task: TaskDTO }) {
       </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        {task.assigneeParticipantId ? 'Assigned' : 'Unassigned'}
+        <AssigneeText assigneeParticipantId={task.assigneeParticipantId} />
       </p>
     </article>
   );
