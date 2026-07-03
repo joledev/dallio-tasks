@@ -63,4 +63,36 @@ describe('guestCsrfCheck (H5)', () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
   });
+
+  // Regression: behind a TLS-terminating proxy the request lands as internal http, but the browser's
+  // Origin is https + the public host arrives via X-Forwarded-Host. Same-origin must be accepted.
+  it('proxied same-origin (https Origin, internal http req.url, X-Forwarded-Host) → allowed', () => {
+    const res = guestCsrfCheck(
+      new Request('http://10.42.0.9:3000/api/b/tok/join', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'https://dallio.example',
+          'x-forwarded-host': 'dallio.example',
+          'sec-fetch-site': 'same-origin',
+        },
+      }),
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it('proxied cross-origin (foreign Origin, X-Forwarded-Host is our host) → FORBIDDEN', () => {
+    const res = guestCsrfCheck(
+      new Request('http://10.42.0.9:3000/api/b/tok/join', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'https://evil.example',
+          'x-forwarded-host': 'dallio.example',
+        },
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe('FORBIDDEN');
+  });
 });
