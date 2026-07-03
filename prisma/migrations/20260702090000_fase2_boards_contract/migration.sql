@@ -5,26 +5,22 @@
 -- reads Task.ownerId / Status.ownerId / Task.assigneeId anymore, so this migration drops those columns,
 -- makes boardId NOT NULL, removes the write-window bridge, and resolves the schema↔DB drift.
 --
--- SINGLE TRANSACTION: Prisma wraps a lone migration.sql in one transaction — do NOT add BEGIN/COMMIT.
--- The real safety is step 2's hard assertion: if any boardId is NULL it RAISEs, the whole transaction
--- rolls back, the migrate-Job fails, deploy.sh never rolls out the image, and prod is left untouched.
--- Only after that guard passes do we reach the irreversible SET NOT NULL / DROP COLUMN steps.
+-- ATOMICITY: Prisma applies a lone migration.sql in one transaction (empirically confirmed via
+-- `prisma migrate deploy` — a forced abort rolled the WHOLE migration back). Do NOT add BEGIN/COMMIT
+-- (it conflicts with that wrapper). As defense-in-depth the hard assertion is the FIRST statement, so
+-- even in a hypothetical non-atomic engine a boardId-NULL abort happens before ANY destructive DDL —
+-- nothing is dropped. Only after the guard passes do we reach the irreversible SET NOT NULL / DROP steps.
 --
 -- Deploy is DESTRUCTIVE → run manually with `DESTRUCTIVE_MIGRATION=1 scripts/deploy.sh <sha>` after a
--- fresh pg_dump backup. Rollback story is `git revert` + a forward compensating migration, NOT an image
--- rollback that assumes the old schema.
+-- fresh pg_dump backup. Rollback is `git revert` + a forward compensating migration, NOT an image
+-- rollback that assumes the old schema. If the assertion ever aborts, `_prisma_migrations` marks this
+-- migration finished=false; before any retry an operator must un-wedge with
+-- `prisma migrate resolve --rolled-back 20260702090000_fase2_boards_contract` (else the next deploy P3009s).
 
--- 1. Drop the write-window bridge. L1b-guest is live and always sets boardId, so the BEFORE INSERT
---    bridge is now a no-op. Dropping it first is safe inside the transaction: Postgres holds the DDL
---    locks to commit, so any concurrent INSERT blocks rather than slipping past the step-2 assertion.
-DROP TRIGGER IF EXISTS task_fill_board_id ON "Task";
-DROP TRIGGER IF EXISTS status_fill_board_id ON "Status";
-DROP FUNCTION IF EXISTS dallio_fill_board_id();
-
--- 2. Hard assertion — the real guard for the irreversible steps below. There is deliberately NO
---    re-backfill here (removed by design: a single owner can now own multiple boards via POST
---    /api/boards, so an ownerId→boardId UPDATE could mis-map). Prod census = 0 NULLs; if that is ever
---    false, RAISE aborts the whole transaction → migrate-Job fails → no rollout → prod untouched.
+-- 1. Hard assertion FIRST — the guard for every destructive step below, before any DDL runs. There is
+--    deliberately NO re-backfill (removed by design: a single owner can now own multiple boards via
+--    POST /api/boards, so an ownerId→boardId UPDATE could mis-map). Prod census = 0 NULLs; if that is
+--    ever false, RAISE aborts before anything is touched → migrate-Job fails → no rollout → prod intact.
 DO $$ BEGIN
   IF (SELECT count(*) FROM "Task"   WHERE "boardId" IS NULL) > 0
   OR (SELECT count(*) FROM "Status" WHERE "boardId" IS NULL) > 0
@@ -32,7 +28,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- 3. Make boardId non-null (safe — the assertion above just proved zero NULLs).
+-- 2. Drop the write-window bridge. L1b-guest is live and always sets boardId, so the BEFORE INSERT
+--    bridge is now a no-op. Postgres holds the DDL locks to commit, so any concurrent INSERT blocks.
+DROP TRIGGER IF EXISTS task_fill_board_id ON "Task";
+DROP TRIGGER IF EXISTS status_fill_board_id ON "Status";
+DROP FUNCTION IF EXISTS dallio_fill_board_id();
+
+-- 3. Make boardId non-null (safe — the leading assertion proved zero NULLs).
 ALTER TABLE "Task"   ALTER COLUMN "boardId" SET NOT NULL;
 ALTER TABLE "Status" ALTER COLUMN "boardId" SET NOT NULL;
 
