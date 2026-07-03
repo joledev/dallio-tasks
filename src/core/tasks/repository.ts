@@ -9,7 +9,7 @@ export type TaskFilter = {
   boardId: string; // ALWAYS applied — the IDOR anchor
   statusId?: string;
   priority?: TaskPriority;
-  assigneeId?: string;
+  assigneeParticipantId?: string; // H1: filter by the board Participant assignee
   q?: string; // title contains, case-insensitive
 };
 
@@ -28,7 +28,7 @@ export type CreateTaskData = {
   priority: TaskPriority;
   boardId: string; // IDOR anchor
   createdByParticipantId: string | null; // guest attribution (null for owner-direct)
-  assigneeId: string | null;
+  assigneeParticipantId: string | null; // H1: → Participant (same-board check in assignTask)
 };
 
 // Cannot move a task across boards or rewrite its creator, so both are dropped from the update surface.

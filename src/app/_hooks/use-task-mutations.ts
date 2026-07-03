@@ -88,11 +88,11 @@ export function useTaskMutations() {
   const assign = useMutation<
     TaskDTO,
     ApiError,
-    { id: string; assigneeId: string | null },
+    { id: string; assigneeParticipantId: string | null },
     OptimisticContext
   >({
-    mutationFn: ({ id, assigneeId }) => api.assignTask(id, { assigneeId }),
-    onMutate: ({ id, assigneeId }) => beginOptimistic(id, { assigneeId }),
+    mutationFn: ({ id, assigneeParticipantId }) => api.assignTask(id, { assigneeParticipantId }),
+    onMutate: ({ id, assigneeParticipantId }) => beginOptimistic(id, { assigneeParticipantId }),
     onError: (error, _vars, context) => {
       rollback(context);
       toast.error(messageFor(error));

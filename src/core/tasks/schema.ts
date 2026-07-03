@@ -24,8 +24,10 @@ export const updateTaskSchema = z
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Empty update' });
 
+// H1 (L1b-guest): assignment repoints from the legacy User FK to the board Participant. Only
+// `assigneeParticipantId` is accepted on any surface now; the legacy `assigneeId` is no longer a field.
 export const assignTaskSchema = z.object({
-  assigneeId: z.uuid().nullable(), // null = unassign
+  assigneeParticipantId: z.uuid().nullable(), // null = unassign
 });
 
 // `status` still sorts, but now by the joined Status.position (not the removed enum).
@@ -34,7 +36,7 @@ export const TASK_SORT_FIELDS = ['createdAt', 'priority', 'status', 'title'] as 
 export const listTasksQuerySchema = z.object({
   statusId: z.uuid().optional(),
   priority: PriorityEnum.optional(),
-  assigneeId: z.uuid().optional(),
+  assigneeParticipantId: z.uuid().optional(),
   q: z.string().trim().min(1).max(200).optional(), // title contains (case-insensitive)
   sort: z.enum(TASK_SORT_FIELDS).default('createdAt'),
   dir: z.enum(['asc', 'desc']).default('desc'),

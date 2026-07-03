@@ -1,7 +1,7 @@
 import { ok, err, type Result } from '@/core/shared/envelope';
 import { pageOffset, type Paginated } from '@/core/shared/pagination';
 import type { Actor } from '@/core/shared/actor';
-import type { UserRepository } from '@/core/users/repository';
+import type { ParticipantRepository } from '@/core/participants/repository';
 import type { StatusRepository } from '@/core/statuses/repository';
 import type { TaskRepository } from './repository';
 import type { Task } from './task';
@@ -27,7 +27,7 @@ export async function createTask(
     priority: input.priority,
     boardId: actor.boardId, // derived identity, never from the body
     createdByParticipantId: actor.participantId, // guest attribution (null for owner-direct)
-    assigneeId: null, // created unassigned
+    assigneeParticipantId: null, // created unassigned
   });
   return ok(task);
 }
@@ -51,7 +51,7 @@ export async function listTasks(
       boardId: actor.boardId,
       statusId: query.statusId,
       priority: query.priority,
-      assigneeId: query.assigneeId,
+      assigneeParticipantId: query.assigneeParticipantId,
       q: query.q,
     },
     sort: query.sort,
@@ -85,23 +85,26 @@ export async function deleteTask(
   return removed ? ok(null) : err('NOT_FOUND', 'Task not found');
 }
 
-// The one "rich" use-case: composes the task and user repos with real branching. Assign stays on the
-// legacy assigneeId → User path (untouched); only the scope anchor moves to actor.boardId.
+// The one "rich" use-case: composes the task and participant repos with real branching. H1 repoints
+// assignment onto the board Participant — the legacy User path is gone.
 export async function assignTask(
   taskRepo: TaskRepository,
-  userRepo: UserRepository,
+  participantRepo: ParticipantRepository,
   actor: Actor,
   id: string,
   input: AssignTaskInput,
 ): Promise<Result<Task>> {
   // Check board scope FIRST: an off-board/absent task returns NOT_FOUND before any assignee lookup, so a
-  // caller who can't reach the task can't use this endpoint to probe which user ids exist.
-  if (input.assigneeId !== null) {
+  // caller who can't reach the task can't use this endpoint to probe which participant ids exist. A
+  // participant from ANOTHER board is invisible under the board-scoped getById → NOT_FOUND (board IDOR).
+  if (input.assigneeParticipantId !== null) {
     const owned = await taskRepo.get(id, actor.boardId);
     if (!owned) return err('NOT_FOUND', 'Task not found');
-    const assignee = await userRepo.getById(input.assigneeId);
-    if (!assignee) return err('VALIDATION_ERROR', 'Assignee does not exist');
+    const assignee = await participantRepo.getById(input.assigneeParticipantId, actor.boardId);
+    if (!assignee) return err('NOT_FOUND', 'Participant not found');
   }
-  const task = await taskRepo.update(id, actor.boardId, { assigneeId: input.assigneeId });
+  const task = await taskRepo.update(id, actor.boardId, {
+    assigneeParticipantId: input.assigneeParticipantId,
+  });
   return task ? ok(task) : err('NOT_FOUND', 'Task not found'); // update() re-checks the board scope
 }

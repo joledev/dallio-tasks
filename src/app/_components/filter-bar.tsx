@@ -106,8 +106,8 @@ export function FilterBar() {
       {/* Assignee filter: the API filters by a concrete `assigneeId` (uuid) only — there is no
           "unassigned" filter param, so the options are All + each user. */}
       <Select
-        value={filters.assigneeId ?? ALL}
-        onValueChange={(v) => set({ assigneeId: v === ALL ? undefined : v })}
+        value={filters.assigneeParticipantId ?? ALL}
+        onValueChange={(v) => set({ assigneeParticipantId: v === ALL ? undefined : v })}
       >
         <SelectTrigger
           className="h-11! w-full md:h-9! md:w-[160px]"

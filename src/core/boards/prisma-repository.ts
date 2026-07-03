@@ -1,5 +1,7 @@
 import type { Board as PrismaBoard } from '@prisma/client';
 import { prisma } from '@/core/shared/prisma';
+import { generateShareToken } from '@/core/shared/token';
+import { DEFAULT_STATUS_SEED } from '@/core/statuses/seed';
 import type { BoardRepository } from './repository';
 import type { Board } from './board';
 
@@ -25,5 +27,25 @@ export class PrismaBoardRepository implements BoardRepository {
   async getByToken(token: string) {
     const row = await prisma.board.findUnique({ where: { shareToken: token } });
     return row ? toBoard(row) : null;
+  }
+
+  async listByOwner(ownerId: string) {
+    const rows = await prisma.board.findMany({ where: { ownerId }, orderBy: { createdAt: 'asc' } });
+    return rows.map(toBoard);
+  }
+
+  async createForOwner(ownerId: string, name: string) {
+    // Board + its default status columns are created atomically so a new board is never left without
+    // a default status (createTask falls back to it). shareToken is a fresh, unguessable 128-bit hex.
+    const row = await prisma.$transaction(async (tx) => {
+      const board = await tx.board.create({
+        data: { ownerId, name, shareToken: generateShareToken() },
+      });
+      await tx.status.createMany({
+        data: DEFAULT_STATUS_SEED.map((s) => ({ boardId: board.id, ...s })),
+      });
+      return board;
+    });
+    return toBoard(row);
   }
 }

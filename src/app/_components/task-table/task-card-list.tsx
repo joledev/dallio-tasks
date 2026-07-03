@@ -37,7 +37,11 @@ export function TaskCardList({ items, className }: { items: TaskDTO[]; className
           <div className="mt-4 grid gap-2">
             <StatusSelect taskId={task.id} statusId={task.statusId} className="h-11! w-full" />
             <PrioritySelect taskId={task.id} priority={task.priority} className="h-11! w-full" />
-            <AssignControl taskId={task.id} assigneeId={task.assigneeId} className="h-11! w-full" />
+            <AssignControl
+              taskId={task.id}
+              assigneeParticipantId={task.assigneeParticipantId}
+              className="h-11! w-full"
+            />
           </div>
 
           <p className="text-muted-foreground mt-3 text-xs">Created {formatDate(task.createdAt)}</p>
