@@ -6,7 +6,7 @@ export type TaskSortField = (typeof TASK_SORT_FIELDS)[number];
 type SortDir = 'asc' | 'desc';
 
 export type TaskFilter = {
-  ownerId: string; // ALWAYS applied — the IDOR anchor
+  boardId: string; // ALWAYS applied — the IDOR anchor
   statusId?: string;
   priority?: TaskPriority;
   assigneeId?: string;
@@ -26,11 +26,13 @@ export type CreateTaskData = {
   description: string | null;
   statusId: string; // resolved server-side (default or scope-checked)
   priority: TaskPriority;
-  ownerId: string;
+  boardId: string; // IDOR anchor
+  createdByParticipantId: string | null; // guest attribution (null for owner-direct)
   assigneeId: string | null;
 };
 
-export type UpdateTaskData = Partial<Omit<CreateTaskData, 'ownerId'>>;
+// Cannot move a task across boards or rewrite its creator, so both are dropped from the update surface.
+export type UpdateTaskData = Partial<Omit<CreateTaskData, 'boardId' | 'createdByParticipantId'>>;
 
 // Sort allowlist as an injection-safe order-by builder: each domain field maps to a FIXED structured
 // Prisma orderBy. `status` orders by the joined Status.position (not the removed enum). Zod restricts
@@ -46,12 +48,12 @@ export const TASK_ORDER_BY: Record<
   status: (dir) => ({ status: { position: dir } }),
 };
 
-// ISP: tasks only. get/update/delete require ownerId — ownership is enforced in-query, never as a
-// post-fetch check. A miss (wrong owner OR nonexistent) is indistinguishable → maps to 404.
+// ISP: tasks only. get/update/delete require boardId — scoping is enforced in-query, never as a
+// post-fetch check. A miss (wrong board OR nonexistent) is indistinguishable → maps to 404.
 export interface TaskRepository {
   list(params: TaskListParams): Promise<{ items: Task[]; total: number }>; // filtered count included
-  get(id: string, ownerId: string): Promise<Task | null>; // owner-scoped
+  get(id: string, boardId: string): Promise<Task | null>; // board-scoped
   create(data: CreateTaskData): Promise<Task>;
-  update(id: string, ownerId: string, data: UpdateTaskData): Promise<Task | null>; // null = miss/not-owned
-  delete(id: string, ownerId: string): Promise<boolean>; // false = miss/not-owned
+  update(id: string, boardId: string, data: UpdateTaskData): Promise<Task | null>; // null = miss/off-board
+  delete(id: string, boardId: string): Promise<boolean>; // false = miss/off-board
 }

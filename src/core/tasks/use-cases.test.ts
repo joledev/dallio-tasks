@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { InMemoryTaskRepository } from '@/test/in-memory/task-repository';
 import { InMemoryUserRepository } from '@/test/in-memory/user-repository';
 import { InMemoryStatusRepository } from '@/test/in-memory/status-repository';
+import type { Actor } from '@/core/shared/actor';
 import { createTask, getTask, listTasks, updateTask, deleteTask, assignTask } from './use-cases';
 import {
   createTaskSchema,
@@ -12,13 +13,15 @@ import {
 } from './schema';
 import type { CreateTaskData } from './repository';
 
-const USER_A = '00000000-0000-4000-8000-00000000000a';
-const USER_B = '00000000-0000-4000-8000-00000000000b';
+const BOARD_A = '00000000-0000-4000-8000-00000000000a';
+const BOARD_B = '00000000-0000-4000-8000-00000000000b';
+const actorA: Actor = { boardId: BOARD_A, participantId: null };
+const actorB: Actor = { boardId: BOARD_B, participantId: null };
 
-// Seed the canonical 3 statuses for an owner (todo=default pos0, in_progress pos1, done pos2).
-async function seedStatuses(repo: InMemoryStatusRepository, ownerId: string) {
+// Seed the canonical 3 statuses for a board (todo=default pos0, in_progress pos1, done pos2).
+async function seedStatuses(repo: InMemoryStatusRepository, boardId: string) {
   const todo = await repo.create({
-    ownerId,
+    boardId,
     name: 'To do',
     slug: 'todo',
     position: 0,
@@ -26,7 +29,7 @@ async function seedStatuses(repo: InMemoryStatusRepository, ownerId: string) {
     isDefault: true,
   });
   const inProgress = await repo.create({
-    ownerId,
+    boardId,
     name: 'In progress',
     slug: 'in_progress',
     position: 1,
@@ -34,7 +37,7 @@ async function seedStatuses(repo: InMemoryStatusRepository, ownerId: string) {
     isDefault: false,
   });
   const done = await repo.create({
-    ownerId,
+    boardId,
     name: 'Done',
     slug: 'done',
     position: 2,
@@ -56,25 +59,25 @@ describe('createTask — server-resolved status', () => {
   let ids: Awaited<ReturnType<typeof seedStatuses>>;
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
-    ids = await seedStatuses(statusRepo, USER_A);
+    ids = await seedStatuses(statusRepo, BOARD_A);
   });
 
-  it('omitted statusId resolves the owner default; owner from actingUserId, unassigned', async () => {
+  it('omitted statusId resolves the board default; board from actor, unassigned', async () => {
     const parsed = createTaskSchema.parse({ title: 'Buy milk', priority: 'HIGH' });
-    const res = await createTask(taskRepo, statusRepo, USER_A, parsed);
+    const res = await createTask(taskRepo, statusRepo, actorA, parsed);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.statusId).toBe(ids.todo);
     expect(res.data.status.slug).toBe('todo');
     expect(res.data.status.isDefault).toBe(true);
-    expect(res.data.ownerId).toBe(USER_A);
+    expect(res.data.boardId).toBe(BOARD_A);
     expect(res.data.assigneeId).toBeNull();
     expect(res.data.priority).toBe('HIGH');
   });
 
   it('uses a supplied in-scope statusId', async () => {
     const parsed = createTaskSchema.parse({ title: 'Ship it', statusId: ids.done });
-    const res = await createTask(taskRepo, statusRepo, USER_A, parsed);
+    const res = await createTask(taskRepo, statusRepo, actorA, parsed);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.statusId).toBe(ids.done);
@@ -83,9 +86,9 @@ describe('createTask — server-resolved status', () => {
 
   it('rejects a foreign/unknown statusId → VALIDATION_ERROR (IDOR scope check)', async () => {
     const foreign = new InMemoryStatusRepository();
-    const bIds = await seedStatuses(foreign, USER_B); // B's status is invisible to A
+    const bIds = await seedStatuses(foreign, BOARD_B); // B's status is invisible to A
     const parsed = createTaskSchema.parse({ title: 'Sneaky', statusId: bIds.done });
-    const res = await createTask(taskRepo, statusRepo, USER_A, parsed);
+    const res = await createTask(taskRepo, statusRepo, actorA, parsed);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
   });
@@ -93,8 +96,8 @@ describe('createTask — server-resolved status', () => {
   it('drops client-supplied ownerId/assigneeId at the schema boundary', () => {
     const parsed = createTaskSchema.parse({
       title: 'Sneaky',
-      ownerId: USER_B, // attacker tries to set owner
-      assigneeId: USER_B,
+      ownerId: BOARD_B, // attacker tries to set scope
+      assigneeId: BOARD_B,
     } as Record<string, unknown>);
     expect('ownerId' in parsed).toBe(false);
     expect('assigneeId' in parsed).toBe(false);
@@ -107,7 +110,7 @@ describe('listTasks — pagination', () => {
   let ids: Awaited<ReturnType<typeof seedStatuses>>;
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
-    ids = await seedStatuses(statusRepo, USER_A);
+    ids = await seedStatuses(statusRepo, BOARD_A);
     // 25 tasks Task-00..Task-24, 10 of them done.
     for (let i = 0; i < 25; i++) {
       await taskRepo.create(
@@ -120,7 +123,7 @@ describe('listTasks — pagination', () => {
 
   it('page=1 is not skipped (offset 0 returns the first row)', async () => {
     const q = listTasksQuerySchema.parse({ sort: 'title', dir: 'asc', page: '1', size: '10' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.items).toHaveLength(10);
@@ -131,7 +134,7 @@ describe('listTasks — pagination', () => {
 
   it('last partial page returns the remainder', async () => {
     const q = listTasksQuerySchema.parse({ sort: 'title', dir: 'asc', page: '3', size: '10' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('expected ok');
     expect(res.data.items).toHaveLength(5);
     expect(res.data.items[0].title).toBe('Task-20');
@@ -140,7 +143,7 @@ describe('listTasks — pagination', () => {
 
   it('out-of-range page returns empty items but the full total', async () => {
     const q = listTasksQuerySchema.parse({ page: '99', size: '10' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('expected ok');
     expect(res.data.items).toEqual([]);
     expect(res.data.total).toBe(25); // total is NOT clamped to the page
@@ -148,7 +151,7 @@ describe('listTasks — pagination', () => {
 
   it('total reflects the SAME filters as the page query', async () => {
     const q = listTasksQuerySchema.parse({ statusId: ids.done, page: '1', size: '5' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('expected ok');
     expect(res.data.items).toHaveLength(5); // one page of the filtered set
     expect(res.data.total).toBe(10); // filtered total, not 25
@@ -179,7 +182,7 @@ describe('listTasks — filtering', () => {
   const assignee = randomUUID();
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
-    ids = await seedStatuses(statusRepo, USER_A);
+    ids = await seedStatuses(statusRepo, BOARD_A);
     await taskRepo.create(taskData(ids.todo, { title: 'Alpha', priority: 'LOW' }));
     await taskRepo.create(taskData(ids.done, { title: 'Beta', priority: 'HIGH' }));
     await taskRepo.create(
@@ -190,35 +193,35 @@ describe('listTasks — filtering', () => {
 
   it('filters by statusId', async () => {
     const q = listTasksQuerySchema.parse({ statusId: ids.done });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.title).sort()).toEqual(['Beta', 'Gamma']);
   });
 
   it('filters by priority', async () => {
     const q = listTasksQuerySchema.parse({ priority: 'LOW' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.title).sort()).toEqual(['Alpha', 'Gamma']);
   });
 
   it('filters by assigneeId', async () => {
     const q = listTasksQuerySchema.parse({ assigneeId: assignee });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.title)).toEqual(['Gamma']);
   });
 
   it('filters by q (title contains, case-insensitive)', async () => {
     const q = listTasksQuerySchema.parse({ q: 'alpha' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.title).sort()).toEqual(['Alpha', 'aLPha-two']);
   });
 
   it('combines filters with AND', async () => {
     const q = listTasksQuerySchema.parse({ statusId: ids.done, priority: 'LOW' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.title)).toEqual(['Gamma']); // done AND LOW
   });
@@ -230,7 +233,7 @@ describe('listTasks — sort by status position', () => {
   let ids: Awaited<ReturnType<typeof seedStatuses>>;
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
-    ids = await seedStatuses(statusRepo, USER_A);
+    ids = await seedStatuses(statusRepo, BOARD_A);
     // Insert out of position order to prove ordering is by Status.position, not insertion/slug.
     await taskRepo.create(taskData(ids.done, { title: 'D' }));
     await taskRepo.create(taskData(ids.todo, { title: 'T' }));
@@ -239,14 +242,14 @@ describe('listTasks — sort by status position', () => {
 
   it('sort=status asc orders by Status.position (todo<in_progress<done)', async () => {
     const q = listTasksQuerySchema.parse({ sort: 'status', dir: 'asc' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.status.slug)).toEqual(['todo', 'in_progress', 'done']);
   });
 
   it('sort=status desc reverses the position order', async () => {
     const q = listTasksQuerySchema.parse({ sort: 'status', dir: 'desc' });
-    const res = await listTasks(taskRepo, USER_A, q);
+    const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.status.slug)).toEqual(['done', 'in_progress', 'todo']);
   });
@@ -281,7 +284,7 @@ describe('sort allowlist (never injects, never passwordHash)', () => {
   });
 });
 
-describe('IDOR — A cannot read/update/delete/assign B (and vice versa)', () => {
+describe('IDOR — board A cannot read/update/delete/assign board B (and vice versa)', () => {
   let taskRepo: InMemoryTaskRepository;
   let statusRepo: InMemoryStatusRepository;
   let userRepo: InMemoryUserRepository;
@@ -292,16 +295,16 @@ describe('IDOR — A cannot read/update/delete/assign B (and vice versa)', () =>
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
     userRepo = new InMemoryUserRepository();
-    idsA = await seedStatuses(statusRepo, USER_A);
-    idsB = await seedStatuses(statusRepo, USER_B);
-    taskOfA = (await taskRepo.create(taskData(idsA.todo, { title: 'A-owned', ownerId: USER_A })))
+    idsA = await seedStatuses(statusRepo, BOARD_A);
+    idsB = await seedStatuses(statusRepo, BOARD_B);
+    taskOfA = (await taskRepo.create(taskData(idsA.todo, { title: 'A-owned', boardId: BOARD_A })))
       .id;
   });
 
-  it('getTask: owner A succeeds, non-owner B → NOT_FOUND', async () => {
-    const asA = await getTask(taskRepo, USER_A, taskOfA);
+  it('getTask: board A succeeds, other board B → NOT_FOUND', async () => {
+    const asA = await getTask(taskRepo, actorA, taskOfA);
     expect(asA.ok).toBe(true);
-    const asB = await getTask(taskRepo, USER_B, taskOfA);
+    const asB = await getTask(taskRepo, actorB, taskOfA);
     expect(asB.ok).toBe(false);
     if (!asB.ok) expect(asB.error.code).toBe('NOT_FOUND');
   });
@@ -310,46 +313,46 @@ describe('IDOR — A cannot read/update/delete/assign B (and vice versa)', () =>
     const res = await updateTask(
       taskRepo,
       statusRepo,
-      USER_B,
+      actorB,
       taskOfA,
       updateTaskSchema.parse({ title: 'hacked' }),
     );
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
-    const still = await getTask(taskRepo, USER_A, taskOfA);
+    const still = await getTask(taskRepo, actorA, taskOfA);
     if (!still.ok) throw new Error('ok');
     expect(still.data.title).toBe('A-owned'); // untouched
   });
 
-  it("updateTask by A to B's status → VALIDATION_ERROR (cross-owner status invisible)", async () => {
+  it("updateTask by A to B's status → VALIDATION_ERROR (cross-board status invisible)", async () => {
     const res = await updateTask(
       taskRepo,
       statusRepo,
-      USER_A,
+      actorA,
       taskOfA,
       updateTaskSchema.parse({ statusId: idsB.done }),
     );
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
-    const still = await getTask(taskRepo, USER_A, taskOfA);
+    const still = await getTask(taskRepo, actorA, taskOfA);
     if (!still.ok) throw new Error('ok');
     expect(still.data.status.slug).toBe('todo'); // unchanged
   });
 
   it('deleteTask by B → NOT_FOUND and the task survives', async () => {
-    const res = await deleteTask(taskRepo, USER_B, taskOfA);
+    const res = await deleteTask(taskRepo, actorB, taskOfA);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
-    const still = await getTask(taskRepo, USER_A, taskOfA);
+    const still = await getTask(taskRepo, actorA, taskOfA);
     expect(still.ok).toBe(true); // survives
   });
 
-  it('assignTask by B → NOT_FOUND (owner scope wins over assignee validation)', async () => {
+  it('assignTask by B → NOT_FOUND (board scope wins over assignee validation)', async () => {
     const assignee = await userRepo.create({ email: 'a@x.io', name: 'A', passwordHash: null });
     const res = await assignTask(
       taskRepo,
       userRepo,
-      USER_B,
+      actorB,
       taskOfA,
       assignTaskSchema.parse({ assigneeId: assignee.id }),
     );
@@ -357,17 +360,17 @@ describe('IDOR — A cannot read/update/delete/assign B (and vice versa)', () =>
     if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
   });
 
-  it('owner A can update their own task status and delete it', async () => {
+  it('board A can update their own task status and delete it', async () => {
     const upd = await updateTask(
       taskRepo,
       statusRepo,
-      USER_A,
+      actorA,
       taskOfA,
       updateTaskSchema.parse({ statusId: idsA.done }),
     );
     expect(upd.ok).toBe(true);
     if (upd.ok) expect(upd.data.status.slug).toBe('done');
-    const del = await deleteTask(taskRepo, USER_A, taskOfA);
+    const del = await deleteTask(taskRepo, actorA, taskOfA);
     expect(del.ok).toBe(true);
   });
 });
@@ -381,8 +384,8 @@ describe('assignTask', () => {
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
     userRepo = new InMemoryUserRepository();
-    const ids = await seedStatuses(statusRepo, USER_A);
-    taskOfA = (await taskRepo.create(taskData(ids.todo, { ownerId: USER_A }))).id;
+    const ids = await seedStatuses(statusRepo, BOARD_A);
+    taskOfA = (await taskRepo.create(taskData(ids.todo, { boardId: BOARD_A }))).id;
   });
 
   it('assigns to an existing user (happy path)', async () => {
@@ -390,7 +393,7 @@ describe('assignTask', () => {
     const res = await assignTask(
       taskRepo,
       userRepo,
-      USER_A,
+      actorA,
       taskOfA,
       assignTaskSchema.parse({ assigneeId: assignee.id }),
     );
@@ -403,7 +406,7 @@ describe('assignTask', () => {
     const res = await assignTask(
       taskRepo,
       userRepo,
-      USER_A,
+      actorA,
       taskOfA,
       assignTaskSchema.parse({ assigneeId: ghost }),
     );
@@ -415,7 +418,7 @@ describe('assignTask', () => {
     const res = await assignTask(
       taskRepo,
       userRepo,
-      USER_A,
+      actorA,
       taskOfA,
       assignTaskSchema.parse({ assigneeId: null }),
     );
@@ -437,7 +440,8 @@ function taskData(statusId: string, over: Partial<CreateTaskData> = {}): CreateT
     description: null,
     statusId,
     priority: 'MEDIUM',
-    ownerId: USER_A,
+    boardId: BOARD_A,
+    createdByParticipantId: null,
     assigneeId: null,
     ...over,
   };

@@ -14,7 +14,7 @@ import type { StatusRef } from '@/core/statuses/status';
 type TaskRow = Omit<Task, 'status'>;
 
 // In-memory TaskRepository built to the same port contract as the Prisma impl. It MUST replicate
-// owner-scoping (IDOR anchor), case-insensitive `q` (title contains), sort-by-field asc/desc (incl.
+// board-scoping (IDOR anchor), case-insensitive `q` (title contains), sort-by-field asc/desc (incl.
 // `status` → joined Status.position), and offset/limit + filtered-count semantics — so use-case unit
 // tests exercise the real behavior.
 export class InMemoryTaskRepository implements TaskRepository {
@@ -44,7 +44,7 @@ export class InMemoryTaskRepository implements TaskRepository {
 
   async list({ filter, sort, dir, offset, limit }: TaskListParams) {
     const matched = this.rows.filter((t) => {
-      if (t.ownerId !== filter.ownerId) return false; // IDOR anchor — always applied
+      if (t.boardId !== filter.boardId) return false; // IDOR anchor — always applied
       if (filter.statusId && t.statusId !== filter.statusId) return false;
       if (filter.priority && t.priority !== filter.priority) return false;
       if (filter.assigneeId && t.assigneeId !== filter.assigneeId) return false;
@@ -63,8 +63,8 @@ export class InMemoryTaskRepository implements TaskRepository {
     return { items, total };
   }
 
-  async get(id: string, ownerId: string) {
-    const row = this.rows.find((t) => t.id === id && t.ownerId === ownerId);
+  async get(id: string, boardId: string) {
+    const row = this.rows.find((t) => t.id === id && t.boardId === boardId);
     return row ? this.materialize(row) : null;
   }
 
@@ -77,7 +77,7 @@ export class InMemoryTaskRepository implements TaskRepository {
       description: data.description,
       statusId: data.statusId,
       priority: data.priority,
-      ownerId: data.ownerId,
+      boardId: data.boardId,
       assigneeId: data.assigneeId,
       createdAt: now,
       updatedAt: now,
@@ -86,9 +86,9 @@ export class InMemoryTaskRepository implements TaskRepository {
     return this.materialize(row);
   }
 
-  async update(id: string, ownerId: string, data: UpdateTaskData) {
-    const row = this.rows.find((t) => t.id === id && t.ownerId === ownerId); // owner-scoped
-    if (!row) return null; // miss/not-owned → null (→ 404)
+  async update(id: string, boardId: string, data: UpdateTaskData) {
+    const row = this.rows.find((t) => t.id === id && t.boardId === boardId); // board-scoped
+    if (!row) return null; // miss/off-board → null (→ 404)
     if (data.title !== undefined) row.title = data.title;
     if (data.description !== undefined) row.description = data.description;
     if (data.statusId !== undefined) row.statusId = data.statusId;
@@ -98,9 +98,9 @@ export class InMemoryTaskRepository implements TaskRepository {
     return this.materialize(row);
   }
 
-  async delete(id: string, ownerId: string) {
-    const idx = this.rows.findIndex((t) => t.id === id && t.ownerId === ownerId);
-    if (idx === -1) return false; // miss/not-owned → false
+  async delete(id: string, boardId: string) {
+    const idx = this.rows.findIndex((t) => t.id === id && t.boardId === boardId);
+    if (idx === -1) return false; // miss/off-board → false
     this.rows.splice(idx, 1);
     return true;
   }

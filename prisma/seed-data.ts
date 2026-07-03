@@ -126,15 +126,15 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
     ada: adaParticipant.id,
   } as const;
 
-  // Statuses are owner-scoped AND board-scoped; upsert by the natural key (ownerId, slug) so a fresh DB
-  // gets the fixed ids while an already-migrated DB (statuses seeded by the migration) reuses its rows.
-  // Resolve each slug to the *actual* row id for the task FK, whichever path created it.
+  // Statuses are board-scoped (L1b cutover — the ownerId column stays in the DB until L1c but the code
+  // no longer reads it); upsert by the natural key (boardId, slug) so a fresh DB gets the fixed ids
+  // while an already-migrated DB reuses its rows. Resolve each slug to the *actual* row id for the task FK.
   const statusIdBySlug = new Map<string, string>();
   for (const { id, slug, ...status } of SEED_STATUSES) {
     const row = await prisma.status.upsert({
-      where: { ownerId_slug: { ownerId: OWNER_ID, slug } },
+      where: { boardId_slug: { boardId: SEED_BOARD_ID, slug } },
       update: { ...status, boardId: SEED_BOARD_ID },
-      create: { id, ownerId: OWNER_ID, boardId: SEED_BOARD_ID, slug, ...status },
+      create: { id, boardId: SEED_BOARD_ID, slug, ...status },
     });
     statusIdBySlug.set(slug, row.id);
   }
@@ -142,7 +142,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
   for (const { assignee, statusSlug, ...task } of SEED_TASKS) {
     const data = {
       ...task,
-      ownerId: OWNER_ID,
       boardId: SEED_BOARD_ID,
       statusId: statusIdBySlug.get(statusSlug)!,
       assigneeId: assignee ? assigneeId[assignee] : null,

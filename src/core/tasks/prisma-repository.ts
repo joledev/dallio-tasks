@@ -16,10 +16,17 @@ const toTask = (row: TaskRow): Task => ({
   title: row.title,
   description: row.description,
   statusId: row.statusId,
-  // Reuse the canonical projection; widen the Prisma String? column to the palette token (writes are constrained).
-  status: toStatusRef({ ...row.status, color: row.status.color as StatusColor | null }),
+  // Reuse the canonical projection; widen the Prisma String? column to the palette token (writes are
+  // constrained) and assert the nullable boardId (app always sets it — see the boardId note below).
+  status: toStatusRef({
+    ...row.status,
+    color: row.status.color as StatusColor | null,
+    boardId: row.status.boardId!,
+  }),
   priority: row.priority,
-  ownerId: row.ownerId,
+  // boardId is nullable in the DB until L1c but the app always sets it (L1a backfill + a DB trigger
+  // fills any interim write), so the domain treats it as non-null here.
+  boardId: row.boardId!,
   assigneeId: row.assigneeId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -28,7 +35,7 @@ const toTask = (row: TaskRow): Task => ({
 export class PrismaTaskRepository implements TaskRepository {
   async list({ filter, sort, dir, offset, limit }: TaskListParams) {
     const where: Prisma.TaskWhereInput = {
-      ownerId: filter.ownerId, // IDOR anchor — always present
+      boardId: filter.boardId, // IDOR anchor — always present
       ...(filter.statusId && { statusId: filter.statusId }),
       ...(filter.priority && { priority: filter.priority }),
       ...(filter.assigneeId && { assigneeId: filter.assigneeId }),
@@ -47,9 +54,9 @@ export class PrismaTaskRepository implements TaskRepository {
     return { items: items.map(toTask), total };
   }
 
-  async get(id: string, ownerId: string) {
-    const row = await prisma.task.findFirst({ where: { id, ownerId }, include: INCLUDE_STATUS });
-    return row ? toTask(row) : null; // findFirst: compound owner scope
+  async get(id: string, boardId: string) {
+    const row = await prisma.task.findFirst({ where: { id, boardId }, include: INCLUDE_STATUS });
+    return row ? toTask(row) : null; // findFirst: compound board scope
   }
 
   async create(data: CreateTaskData) {
@@ -57,15 +64,15 @@ export class PrismaTaskRepository implements TaskRepository {
     return toTask(row);
   }
 
-  async update(id: string, ownerId: string, data: UpdateTaskData) {
-    const res = await prisma.task.updateMany({ where: { id, ownerId }, data }); // scoped write
-    if (res.count === 0) return null; // miss/not-owned → null (→ 404)
-    const row = await prisma.task.findFirst({ where: { id, ownerId }, include: INCLUDE_STATUS });
+  async update(id: string, boardId: string, data: UpdateTaskData) {
+    const res = await prisma.task.updateMany({ where: { id, boardId }, data }); // scoped write
+    if (res.count === 0) return null; // miss/off-board → null (→ 404)
+    const row = await prisma.task.findFirst({ where: { id, boardId }, include: INCLUDE_STATUS });
     return row ? toTask(row) : null;
   }
 
-  async delete(id: string, ownerId: string) {
-    const res = await prisma.task.deleteMany({ where: { id, ownerId } }); // scoped delete
+  async delete(id: string, boardId: string) {
+    const res = await prisma.task.deleteMany({ where: { id, boardId } }); // scoped delete
     return res.count > 0;
   }
 }

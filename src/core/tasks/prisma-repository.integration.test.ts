@@ -18,13 +18,15 @@ const dbUp = await canConnect();
 
 const repo = new PrismaTaskRepository();
 const statusRepo = new PrismaStatusRepository();
-const OWNER_A = randomUUID();
-const OWNER_B = randomUUID();
+const USER_A = randomUUID();
+const USER_B = randomUUID();
+const BOARD_A = randomUUID();
+const BOARD_B = randomUUID();
 
-// Seed the canonical statuses per owner; returns slug → id for that owner.
-async function seedStatuses(ownerId: string) {
+// Seed the canonical statuses per board; returns slug → id for that board.
+async function seedStatuses(boardId: string) {
   const todo = await statusRepo.create({
-    ownerId,
+    boardId,
     name: 'To do',
     slug: 'todo',
     position: 0,
@@ -32,7 +34,7 @@ async function seedStatuses(ownerId: string) {
     isDefault: true,
   });
   const done = await statusRepo.create({
-    ownerId,
+    boardId,
     name: 'Done',
     slug: 'done',
     position: 2,
@@ -49,45 +51,54 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
   beforeAll(async () => {
     await prisma.user.createMany({
       data: [
-        { id: OWNER_A, email: `a-${OWNER_A}@it.local`, name: 'Owner A' },
-        { id: OWNER_B, email: `b-${OWNER_B}@it.local`, name: 'Owner B' },
+        { id: USER_A, email: `a-${USER_A}@it.local`, name: 'Owner A' },
+        { id: USER_B, email: `b-${USER_B}@it.local`, name: 'Owner B' },
       ],
     });
-    aStatus = await seedStatuses(OWNER_A);
-    bStatus = await seedStatuses(OWNER_B);
-    // Owner A: 25 tasks Task-00..Task-24, first 10 done, rest todo; two HIGH priority.
+    await prisma.board.createMany({
+      data: [
+        { id: BOARD_A, ownerId: USER_A, name: 'Board A', shareToken: `tok-${BOARD_A}` },
+        { id: BOARD_B, ownerId: USER_B, name: 'Board B', shareToken: `tok-${BOARD_B}` },
+      ],
+    });
+    aStatus = await seedStatuses(BOARD_A);
+    bStatus = await seedStatuses(BOARD_B);
+    // Board A: 25 tasks Task-00..Task-24, first 10 done, rest todo; two HIGH priority.
     for (let i = 0; i < 25; i++) {
       await repo.create({
         title: `Task-${String(i).padStart(2, '0')}`,
         description: null,
         statusId: i < 10 ? aStatus.done : aStatus.todo,
         priority: i < 2 ? 'HIGH' : 'MEDIUM',
-        ownerId: OWNER_A,
+        boardId: BOARD_A,
+        createdByParticipantId: null,
         assigneeId: null,
       });
     }
-    // Owner B: one task that A must never see/touch.
+    // Board B: one task that A must never see/touch.
     await repo.create({
       title: 'B-secret',
       description: null,
       statusId: bStatus.todo,
       priority: 'LOW',
-      ownerId: OWNER_B,
+      boardId: BOARD_B,
+      createdByParticipantId: null,
       assigneeId: null,
     });
   });
 
   afterAll(async () => {
-    // Delete tasks first (Task.statusId is onDelete: Restrict), then statuses, then users.
-    await prisma.task.deleteMany({ where: { ownerId: { in: [OWNER_A, OWNER_B] } } });
-    await prisma.status.deleteMany({ where: { ownerId: { in: [OWNER_A, OWNER_B] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [OWNER_A, OWNER_B] } } });
+    // Delete tasks first (Task.statusId is onDelete: Restrict), then statuses, then boards, then users.
+    await prisma.task.deleteMany({ where: { boardId: { in: [BOARD_A, BOARD_B] } } });
+    await prisma.status.deleteMany({ where: { boardId: { in: [BOARD_A, BOARD_B] } } });
+    await prisma.board.deleteMany({ where: { id: { in: [BOARD_A, BOARD_B] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [USER_A, USER_B] } } });
     await prisma.$disconnect();
   });
 
   it('filters by statusId in SQL and counts only the filtered set', async () => {
     const { items, total } = await repo.list({
-      filter: { ownerId: OWNER_A, statusId: aStatus.done },
+      filter: { boardId: BOARD_A, statusId: aStatus.done },
       sort: 'title',
       dir: 'asc',
       offset: 0,
@@ -100,7 +111,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
 
   it('paginates via LIMIT/OFFSET: page 1 not skipped, filtered total intact', async () => {
     const page1 = await repo.list({
-      filter: { ownerId: OWNER_A },
+      filter: { boardId: BOARD_A },
       sort: 'title',
       dir: 'asc',
       offset: 0,
@@ -111,7 +122,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
     expect(page1.total).toBe(25);
 
     const page3 = await repo.list({
-      filter: { ownerId: OWNER_A },
+      filter: { boardId: BOARD_A },
       sort: 'title',
       dir: 'asc',
       offset: 20,
@@ -121,7 +132,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
     expect(page3.items[0].title).toBe('Task-20');
 
     const beyond = await repo.list({
-      filter: { ownerId: OWNER_A },
+      filter: { boardId: BOARD_A },
       sort: 'title',
       dir: 'asc',
       offset: 990,
@@ -133,14 +144,14 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
 
   it('orders by an allowlisted column, both directions, in SQL', async () => {
     const asc = await repo.list({
-      filter: { ownerId: OWNER_A },
+      filter: { boardId: BOARD_A },
       sort: 'title',
       dir: 'asc',
       offset: 0,
       limit: 25,
     });
     const desc = await repo.list({
-      filter: { ownerId: OWNER_A },
+      filter: { boardId: BOARD_A },
       sort: 'title',
       dir: 'desc',
       offset: 0,
@@ -152,7 +163,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
 
   it('case-insensitive q filter runs in SQL', async () => {
     const { items } = await repo.list({
-      filter: { ownerId: OWNER_A, q: 'task-0' },
+      filter: { boardId: BOARD_A, q: 'task-0' },
       sort: 'title',
       dir: 'asc',
       offset: 0,
@@ -163,9 +174,9 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
     expect(items.every((t) => t.title.toLowerCase().includes('task-0'))).toBe(true);
   });
 
-  it("IDOR: B's task is invisible to A's list (owner-scoped WHERE)", async () => {
+  it("IDOR: B's task is invisible to A's list (board-scoped WHERE)", async () => {
     const { items, total } = await repo.list({
-      filter: { ownerId: OWNER_A },
+      filter: { boardId: BOARD_A },
       sort: 'title',
       dir: 'asc',
       offset: 0,
@@ -176,22 +187,22 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
   });
 
   it('IDOR: get/update/delete of B-owned task by A is scoped out at the DB', async () => {
-    const bTask = await prisma.task.findFirstOrThrow({ where: { ownerId: OWNER_B } });
+    const bTask = await prisma.task.findFirstOrThrow({ where: { boardId: BOARD_B } });
 
     // A cannot read B's task.
-    expect(await repo.get(bTask.id, OWNER_A)).toBeNull();
+    expect(await repo.get(bTask.id, BOARD_A)).toBeNull();
 
     // A cannot update B's task; updateMany matches 0 rows → null, and the row is unchanged.
-    const upd = await repo.update(bTask.id, OWNER_A, { title: 'hijacked' });
+    const upd = await repo.update(bTask.id, BOARD_A, { title: 'hijacked' });
     expect(upd).toBeNull();
     const afterUpd = await prisma.task.findUniqueOrThrow({ where: { id: bTask.id } });
     expect(afterUpd.title).toBe('B-secret');
 
     // A cannot delete B's task; deleteMany matches 0 rows → false, and the row survives.
-    expect(await repo.delete(bTask.id, OWNER_A)).toBe(false);
+    expect(await repo.delete(bTask.id, BOARD_A)).toBe(false);
     expect(await prisma.task.findUnique({ where: { id: bTask.id } })).not.toBeNull();
 
-    // B (the real owner) can read it.
-    expect(await repo.get(bTask.id, OWNER_B)).not.toBeNull();
+    // B (the real owner board) can read it.
+    expect(await repo.get(bTask.id, BOARD_B)).not.toBeNull();
   });
 });
