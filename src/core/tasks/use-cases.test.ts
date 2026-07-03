@@ -3,11 +3,21 @@ import { randomUUID } from 'node:crypto';
 import { InMemoryTaskRepository } from '@/test/in-memory/task-repository';
 import { InMemoryParticipantRepository } from '@/test/in-memory/participant-repository';
 import { InMemoryStatusRepository } from '@/test/in-memory/status-repository';
+import { InMemoryEventBus } from '@/test/in-memory/event-bus';
 import type { Actor } from '@/core/shared/actor';
-import { createTask, getTask, listTasks, updateTask, deleteTask, assignTask } from './use-cases';
+import {
+  createTask,
+  getTask,
+  listTasks,
+  updateTask,
+  moveTask,
+  deleteTask,
+  assignTask,
+} from './use-cases';
 import {
   createTaskSchema,
   updateTaskSchema,
+  moveTaskSchema,
   assignTaskSchema,
   listTasksQuerySchema,
 } from './schema';
@@ -474,6 +484,137 @@ describe('updateTask schema — empty body', () => {
   it('rejects an empty update via .refine', () => {
     const parsed = updateTaskSchema.safeParse({});
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe('task use-cases — realtime event emission', () => {
+  let taskRepo: InMemoryTaskRepository;
+  let statusRepo: InMemoryStatusRepository;
+  let participantRepo: InMemoryParticipantRepository;
+  let bus: InMemoryEventBus;
+  let ids: Awaited<ReturnType<typeof seedStatuses>>;
+  let taskId: string;
+  const actor: Actor = { boardId: BOARD_A, participantId: randomUUID() };
+
+  beforeEach(async () => {
+    ({ statusRepo, taskRepo } = makeRepos());
+    participantRepo = new InMemoryParticipantRepository();
+    bus = new InMemoryEventBus();
+    ids = await seedStatuses(statusRepo, BOARD_A);
+    taskId = (await taskRepo.create(taskData(ids.todo, { boardId: BOARD_A }))).id;
+  });
+
+  it('emits task.created with the full resulting task', async () => {
+    const res = await createTask(
+      taskRepo,
+      statusRepo,
+      actor,
+      createTaskSchema.parse({ title: 'Live create' }),
+      bus,
+    );
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    expect(bus.published).toHaveLength(1);
+    expect(bus.published[0]).toMatchObject({
+      type: 'task.created',
+      boardId: BOARD_A,
+      actorId: actor.participantId,
+    });
+    if (res.ok)
+      expect(bus.published[0].data).toMatchObject({ id: res.data.id, title: res.data.title });
+  });
+
+  it('emits task.updated after update and assign writes', async () => {
+    const update = await updateTask(
+      taskRepo,
+      statusRepo,
+      actor,
+      taskId,
+      updateTaskSchema.parse({ title: 'Live update' }),
+      bus,
+    );
+    const assignee = await participantRepo.create({
+      boardId: BOARD_A,
+      displayName: 'P',
+      color: null,
+      sessionTokenHash: 'hash-p',
+    });
+    const assign = await assignTask(
+      taskRepo,
+      participantRepo,
+      actor,
+      taskId,
+      assignTaskSchema.parse({ assigneeParticipantId: assignee.id }),
+      bus,
+    );
+    await Promise.resolve();
+
+    expect(update.ok).toBe(true);
+    expect(assign.ok).toBe(true);
+    expect(bus.published.map((e) => e.type)).toEqual(['task.updated', 'task.updated']);
+    expect(bus.published[0].data).toMatchObject({ id: taskId, title: 'Live update' });
+    expect(bus.published[1].data).toMatchObject({
+      id: taskId,
+      assigneeParticipantId: assignee.id,
+    });
+  });
+
+  it('emits task.moved with status and position', async () => {
+    const res = await moveTask(
+      taskRepo,
+      statusRepo,
+      actor,
+      taskId,
+      moveTaskSchema.parse({ statusId: ids.done, position: 3 }),
+      bus,
+    );
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    expect(bus.published).toHaveLength(1);
+    expect(bus.published[0]).toMatchObject({
+      type: 'task.moved',
+      boardId: BOARD_A,
+      actorId: actor.participantId,
+    });
+    expect(bus.published[0].data).toMatchObject({ id: taskId, statusId: ids.done, position: 3 });
+  });
+
+  it('emits task.deleted with only the task id', async () => {
+    const res = await deleteTask(taskRepo, actor, taskId, bus);
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    expect(bus.published).toHaveLength(1);
+    expect(bus.published[0]).toMatchObject({
+      type: 'task.deleted',
+      boardId: BOARD_A,
+      actorId: actor.participantId,
+      data: { id: taskId },
+    });
+  });
+
+  it('does not fail the mutation when publish fails', async () => {
+    const failingBus = {
+      publish: async () => {
+        throw new Error('publish failed');
+      },
+    };
+
+    const res = await updateTask(
+      taskRepo,
+      statusRepo,
+      actor,
+      taskId,
+      updateTaskSchema.parse({ title: 'Still writes' }),
+      failingBus,
+    );
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    const stored = await taskRepo.get(taskId, BOARD_A);
+    expect(stored?.title).toBe('Still writes');
   });
 });
 

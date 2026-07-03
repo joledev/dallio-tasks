@@ -26,6 +26,7 @@ const toTask = (row: TaskRow): Task => ({
   priority: row.priority,
   boardId: row.boardId,
   assigneeParticipantId: row.assigneeParticipantId, // H1: → Participant (legacy assigneeId now dead)
+  position: row.position,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });

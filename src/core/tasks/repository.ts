@@ -29,6 +29,7 @@ export type CreateTaskData = {
   boardId: string; // IDOR anchor
   createdByParticipantId: string | null; // guest attribution (null for owner-direct)
   assigneeParticipantId: string | null; // H1: → Participant (same-board check in assignTask)
+  position?: number; // optional on create: Prisma default keeps legacy callers simple
 };
 
 // Cannot move a task across boards or rewrite its creator, so both are dropped from the update surface.

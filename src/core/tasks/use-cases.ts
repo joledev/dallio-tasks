@@ -3,9 +3,35 @@ import { pageOffset, type Paginated } from '@/core/shared/pagination';
 import type { Actor } from '@/core/shared/actor';
 import type { ParticipantRepository } from '@/core/participants/repository';
 import type { StatusRepository } from '@/core/statuses/repository';
+import { logger } from '@/core/shared/logger';
+import type { EventPublisher } from '@/core/realtime/event-bus';
+import { taskCreated, taskUpdated, taskMoved, taskDeleted } from '@/core/realtime/events';
 import type { TaskRepository } from './repository';
 import type { Task } from './task';
-import type { CreateTaskInput, UpdateTaskInput, AssignTaskInput, ListTasksQuery } from './schema';
+import type {
+  CreateTaskInput,
+  UpdateTaskInput,
+  MoveTaskInput,
+  AssignTaskInput,
+  ListTasksQuery,
+} from './schema';
+
+function publishTaskEvent(
+  publisher: EventPublisher | undefined,
+  boardId: string,
+  event: ReturnType<
+    typeof taskCreated | typeof taskUpdated | typeof taskMoved | typeof taskDeleted
+  >,
+) {
+  if (!publisher) return;
+  void publisher.publish(boardId, event).catch((e) => {
+    const scrubbed = e as { name?: string; code?: string };
+    logger.error(
+      { err: { name: scrubbed?.name, code: scrubbed?.code }, boardId },
+      'event publish failed',
+    );
+  });
+}
 
 // Rich use-case: resolves the status server-side. A supplied statusId is scope-checked (IDOR — a
 // foreign/unknown id is invisible → rejected); an absent one falls back to the board's default.
@@ -14,6 +40,7 @@ export async function createTask(
   statusRepo: StatusRepository,
   actor: Actor,
   input: CreateTaskInput,
+  publisher?: EventPublisher,
 ): Promise<Result<Task>> {
   const statusId = input.statusId
     ? (await statusRepo.getById(input.statusId, actor.boardId))?.id
@@ -29,6 +56,7 @@ export async function createTask(
     createdByParticipantId: actor.participantId, // guest attribution (null for owner-direct)
     assigneeParticipantId: null, // created unassigned
   });
+  publishTaskEvent(publisher, actor.boardId, taskCreated(actor.boardId, actor.participantId, task));
   return ok(task);
 }
 
@@ -68,11 +96,34 @@ export async function updateTask(
   actor: Actor,
   id: string,
   input: UpdateTaskInput,
+  publisher?: EventPublisher,
 ): Promise<Result<Task>> {
   // Scope-check a status change first: a cross-board status is invisible → rejected before the write.
   if (input.statusId && !(await statusRepo.getById(input.statusId, actor.boardId)))
     return err('VALIDATION_ERROR', 'Unknown status');
   const task = await repo.update(id, actor.boardId, input);
+  if (task)
+    publishTaskEvent(
+      publisher,
+      actor.boardId,
+      taskUpdated(actor.boardId, actor.participantId, task),
+    );
+  return task ? ok(task) : err('NOT_FOUND', 'Task not found');
+}
+
+export async function moveTask(
+  repo: TaskRepository,
+  statusRepo: StatusRepository,
+  actor: Actor,
+  id: string,
+  input: MoveTaskInput,
+  publisher?: EventPublisher,
+): Promise<Result<Task>> {
+  if (!(await statusRepo.getById(input.statusId, actor.boardId)))
+    return err('VALIDATION_ERROR', 'Unknown status');
+  const task = await repo.update(id, actor.boardId, input);
+  if (task)
+    publishTaskEvent(publisher, actor.boardId, taskMoved(actor.boardId, actor.participantId, task));
   return task ? ok(task) : err('NOT_FOUND', 'Task not found');
 }
 
@@ -80,8 +131,11 @@ export async function deleteTask(
   repo: TaskRepository,
   actor: Actor,
   id: string,
+  publisher?: EventPublisher,
 ): Promise<Result<null>> {
   const removed = await repo.delete(id, actor.boardId);
+  if (removed)
+    publishTaskEvent(publisher, actor.boardId, taskDeleted(actor.boardId, actor.participantId, id));
   return removed ? ok(null) : err('NOT_FOUND', 'Task not found');
 }
 
@@ -93,6 +147,7 @@ export async function assignTask(
   actor: Actor,
   id: string,
   input: AssignTaskInput,
+  publisher?: EventPublisher,
 ): Promise<Result<Task>> {
   // Check board scope FIRST: an off-board/absent task returns NOT_FOUND before any assignee lookup, so a
   // caller who can't reach the task can't use this endpoint to probe which participant ids exist. A
@@ -106,5 +161,11 @@ export async function assignTask(
   const task = await taskRepo.update(id, actor.boardId, {
     assigneeParticipantId: input.assigneeParticipantId,
   });
+  if (task)
+    publishTaskEvent(
+      publisher,
+      actor.boardId,
+      taskUpdated(actor.boardId, actor.participantId, task),
+    );
   return task ? ok(task) : err('NOT_FOUND', 'Task not found'); // update() re-checks the board scope
 }

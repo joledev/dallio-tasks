@@ -6,6 +6,7 @@ import { createTask, listTasks } from '@/core/tasks/use-cases';
 import { taskRepository } from '@/core/tasks/container';
 import { statusRepository } from '@/core/statuses/container';
 import { boardRepository } from '@/core/boards/container';
+import { eventBus } from '@/core/realtime/container';
 
 export async function POST(req: Request) {
   return handle(async () => {
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
     if (!auth.ok) return auth;
     const parsed = parse(createTaskSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return createTask(taskRepository, statusRepository, auth.data, parsed.data);
+    return createTask(taskRepository, statusRepository, auth.data, parsed.data, eventBus);
   }, 201);
 }
 
