@@ -27,13 +27,13 @@ export function TaskCard({ task }: { task: TaskDTO }) {
   const assigneeName = nameFor(task.assigneeId);
 
   // Drag source. The DnD status change is an *enhancement* layered over the inline StatusSelect below
-  // (the accessible keyboard/touch fallback that always stays present). `data.status` lets the board's
+  // (the accessible keyboard/touch fallback that always stays present). `data.statusId` lets the board's
   // onDragEnd short-circuit a same-column drop. The drag lives on a dedicated grip handle so pointer/
   // keyboard drags never fight the card's buttons/selects. On drag the source dims; a DragOverlay
   // (rendered by the board) provides the moving visual, so no transform is applied here.
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.id,
-    data: { status: task.status },
+    data: { statusId: task.statusId },
   });
 
   return (
@@ -89,7 +89,7 @@ export function TaskCard({ task }: { task: TaskDTO }) {
       </div>
 
       <div className="mt-4 grid gap-2">
-        <StatusSelect taskId={task.id} status={task.status} className="w-full" />
+        <StatusSelect taskId={task.id} statusId={task.statusId} className="w-full" />
         <PrioritySelect taskId={task.id} priority={task.priority} className="w-full" />
         <AssignControl taskId={task.id} assigneeId={task.assigneeId} className="w-full" />
       </div>

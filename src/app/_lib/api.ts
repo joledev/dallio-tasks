@@ -1,7 +1,8 @@
 import type { ErrorCode, Result } from '@/core/shared/envelope';
 import { MAX_PAGE_SIZE } from '@/core/shared/pagination';
 import type { CreateTaskInput, UpdateTaskInput, AssignTaskInput } from '@/core/tasks/schema';
-import type { TaskDTO, UserDTO, Paginated } from './types';
+import type { CreateStatusInput } from '@/core/statuses/schema';
+import type { TaskDTO, UserDTO, StatusDTO, Paginated } from './types';
 import type { TaskListFilters } from './query-keys';
 
 // The single typed error the whole UI reasons about. It carries the envelope's closed `code` so
@@ -57,7 +58,7 @@ function toQueryString(filters: TaskListFilters): string {
     if (value === undefined || value === '') return;
     params.set(key, String(value));
   };
-  put('status', filters.status);
+  put('statusId', filters.statusId);
   put('priority', filters.priority);
   put('assigneeId', filters.assigneeId);
   put('q', filters.q);
@@ -89,5 +90,13 @@ export const api = {
   listUsers: async (): Promise<UserDTO[]> => {
     const { items } = await request<Paginated<UserDTO>>(`/api/users?size=${MAX_PAGE_SIZE}`);
     return items;
+  },
+
+  // Statuses are the board columns + every status option. A user has a handful, so the list is
+  // unpaginated (mirrors the server's `GET /api/statuses`).
+  statuses: {
+    list: () => request<StatusDTO[]>('/api/statuses'),
+    create: (body: CreateStatusInput) =>
+      request<StatusDTO>('/api/statuses', { method: 'POST', body: JSON.stringify(body) }),
   },
 };
