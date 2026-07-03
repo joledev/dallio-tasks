@@ -1,16 +1,22 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { SEED_TASKS } from '../prisma/seed-data';
+import { SEED_TASKS, SEED_STATUSES } from '../prisma/seed-data';
 import { resetToSeed } from './reset';
 
-type Status = (typeof SEED_TASKS)[number]['status'];
+// Statuses are data-driven now: tasks carry a `statusSlug` in the seed and board columns are keyed by
+// the seeded status id. Resolve slug → id/title/count through the fixed seed constants.
+type StatusSlug = (typeof SEED_TASKS)[number]['statusSlug'];
 
-const seedTitle = (status: Status) => SEED_TASKS.find((t) => t.status === status)!.title;
-const seedCount = (status: Status) => SEED_TASKS.filter((t) => t.status === status).length;
+const seedTitle = (slug: StatusSlug) => SEED_TASKS.find((t) => t.statusSlug === slug)!.title;
+const seedCount = (slug: StatusSlug) => SEED_TASKS.filter((t) => t.statusSlug === slug).length;
+const statusName = (slug: StatusSlug) => SEED_STATUSES.find((s) => s.slug === slug)!.name;
 
 test.beforeAll(resetToSeed);
 
-function boardColumn(page: Page, status: Status): Locator {
-  return page.locator(`section[aria-labelledby="board-column-${status}"]`);
+function boardColumn(page: Page, slug: StatusSlug): Locator {
+  // Resolve columns by their accessible region name (the status name), NOT by a hardcoded status id:
+  // the DB rows are seeded by the migration with random UUIDs, so the SEED_STATUSES fixed ids do not
+  // match what the API serves. The name is stable and data-driven.
+  return page.getByRole('region', { name: new RegExp(`^${statusName(slug)}\\b`) });
 }
 
 // dnd-kit's PointerSensor needs real pointer movement: it arms only after the pointer travels past
@@ -37,28 +43,29 @@ async function dragCardToColumn(page: Page, grip: Locator, targetColumn: Locator
   await page.mouse.up();
 }
 
-const STATUSES: Status[] = ['TODO', 'IN_PROGRESS', 'DONE'];
+const SLUGS: StatusSlug[] = ['todo', 'in_progress', 'done'];
 
 test('both views render seeded data with correct counts', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Dallio Tasks' })).toBeVisible();
 
-  for (const status of STATUSES) {
-    await expect(page.getByRole('row').filter({ hasText: seedTitle(status) })).toBeVisible();
+  for (const slug of SLUGS) {
+    await expect(page.getByRole('row').filter({ hasText: seedTitle(slug) })).toBeVisible();
   }
 
   await page.getByRole('tab', { name: 'Board' }).click();
   await expect(page).toHaveURL(/view=board/);
 
-  for (const status of STATUSES) {
-    const column = boardColumn(page, status);
-    await expect(column.getByText(seedTitle(status))).toBeVisible();
+  for (const slug of SLUGS) {
+    const column = boardColumn(page, slug);
+    await expect(column.getByText(seedTitle(slug))).toBeVisible();
 
     // The header badge must equal the number of cards actually rendered, both derived from the seed.
     const cards = column.locator('article');
-    await expect(cards).toHaveCount(seedCount(status));
-    const badge = await column.locator('header span').innerText();
-    expect(Number(badge)).toBe(seedCount(status));
+    await expect(cards).toHaveCount(seedCount(slug));
+    // The count badge is the trailing span inside the column header button (there is no <header>).
+    const badge = await column.locator('h2 button > span').last().innerText();
+    expect(Number(badge)).toBe(seedCount(slug));
   }
 });
 
@@ -72,12 +79,14 @@ test('drag-and-drop moves a card across columns and the change persists', async 
   await dialog.getByPlaceholder('Task title').fill(title);
   await dialog.getByRole('button', { name: 'Create task' }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.getByText(title)).toBeVisible();
+  // Table view renders both the md+ table AND the mobile card list (one hidden per breakpoint), so the
+  // title matches two nodes — scope to the visible table row to avoid a strict-mode violation.
+  await expect(page.getByRole('row').filter({ hasText: title })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Board' }).click();
   await expect(page).toHaveURL(/view=board/);
-  const todo = boardColumn(page, 'TODO');
-  const inProgress = boardColumn(page, 'IN_PROGRESS');
+  const todo = boardColumn(page, 'todo');
+  const inProgress = boardColumn(page, 'in_progress');
   await expect(todo.getByText(title)).toBeVisible();
   await expect(inProgress.getByText(title)).toHaveCount(0);
 
@@ -93,7 +102,12 @@ test('drag-and-drop moves a card across columns and the change persists', async 
   const resp = await patch;
   expect(resp.ok()).toBeTruthy();
   const payload = await resp.json();
-  expect(payload).toMatchObject({ ok: true, data: { title, status: 'IN_PROGRESS' } });
+  // Status is a joined object now; assert the task landed on the in-progress column by slug. (The id
+  // is a migration-generated UUID, not the SEED_STATUSES fixed id, so we assert the stable slug.)
+  expect(payload).toMatchObject({
+    ok: true,
+    data: { title, status: { slug: 'in_progress' } },
+  });
 
   await expect(inProgress.getByText(title)).toBeVisible();
   await expect(todo.getByText(title)).toHaveCount(0);
@@ -101,8 +115,8 @@ test('drag-and-drop moves a card across columns and the change persists', async 
   // Reload so the board re-fetches from the server — proves the move persisted, not just cached.
   await page.reload();
   await expect(page).toHaveURL(/view=board/);
-  const inProgressAfter = boardColumn(page, 'IN_PROGRESS');
-  const todoAfter = boardColumn(page, 'TODO');
+  const inProgressAfter = boardColumn(page, 'in_progress');
+  const todoAfter = boardColumn(page, 'todo');
   await expect(inProgressAfter.getByText(title)).toBeVisible();
   await expect(todoAfter.getByText(title)).toHaveCount(0);
 
