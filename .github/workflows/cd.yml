@@ -18,8 +18,14 @@ jobs:
     # Self-hosted runner (phoneserver). It already has: docker + buildx, and an
     # `ssh JoleDev` alias with an authorized key (used by scripts/deploy.sh).
     runs-on: [self-hosted]
+    # `packages: write` lets the job's ephemeral GITHUB_TOKEN push to GHCR — no
+    # long-lived PAT to store, expire, or exfiltrate from the self-hosted box.
+    # One-time prerequisite (the package pre-existed, unlinked): grant this repo
+    # Write access to ghcr.io/joledev/dallio-tasks under the package's
+    # Settings → Manage Actions access. Without it the push fails closed ("denied").
     permissions:
       contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -27,14 +33,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      # GHCR login uses a PAT secret with read/write:packages (stored in repo
-      # secrets as GHCR_PAT). No secret VALUES are embedded here.
+      # Push auth = the job-scoped GITHUB_TOKEN (see permissions above). No secret
+      # VALUES are embedded here. The cluster's *pull* uses a separate durable
+      # `ghcr-pull` k8s secret — GITHUB_TOKEN is ephemeral and cannot back it.
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
-          username: joledev
-          password: ${{ secrets.GHCR_PAT }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
