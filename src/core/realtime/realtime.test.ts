@@ -72,12 +72,13 @@ describe('EventSubscriber.replay (in-memory)', () => {
 
     const replayed = await bus.replay(BOARD, '2');
 
-    expect(replayed.map((e) => e.id)).toEqual(['3', '4', '5']); // ascending, strictly > 2
+    expect(replayed.events.map((e) => e.id)).toEqual(['3', '4', '5']); // ascending, strictly > 2
+    expect(replayed.oldestId).toBe('1');
   });
 
-  it('returns [] when the board has no backlog', async () => {
+  it('returns an empty result when the board has no backlog', async () => {
     const bus = new InMemoryEventBus();
-    expect(await bus.replay('unknown-board', '0')).toEqual([]);
+    expect(await bus.replay('unknown-board', '0')).toEqual({ events: [], oldestId: null });
   });
 });
 

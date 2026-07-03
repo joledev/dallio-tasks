@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
 import { redis } from './redis';
-import type { EventBus, Unsubscribe } from './event-bus';
+import type { EventBus, ReplayResult, Unsubscribe } from './event-bus';
 import type { BoardEvent, NewBoardEvent } from './events';
 
 // Redis-backed EventBus (pub/sub + capped list — NOT Streams, per the right-sizing decision).
@@ -52,13 +52,16 @@ export class RedisEventBus implements EventBus {
     };
   }
 
-  async replay(boardId: string, afterId: string): Promise<BoardEvent[]> {
+  async replay(boardId: string, afterId: string): Promise<ReplayResult> {
     const after = Number(afterId);
     const raw = await this.client.lrange(logKey(boardId), 0, -1); // newest-first (LPUSH order)
-    return raw
+    const events = raw
       .map((r) => JSON.parse(r) as BoardEvent)
-      .filter((e) => Number(e.id) > after)
       .sort((a, b) => Number(a.id) - Number(b.id)); // oldest-first for replay
+    return {
+      events: events.filter((e) => Number(e.id) > after),
+      oldestId: events[0]?.id ?? null,
+    };
   }
 
   async getCurrentSeq(boardId: string): Promise<string | null> {

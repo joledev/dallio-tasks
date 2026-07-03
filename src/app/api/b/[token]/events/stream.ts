@@ -1,5 +1,5 @@
 import type { BoardEvent } from '@/core/realtime/events';
-import type { EventBus, Unsubscribe } from '@/core/realtime/event-bus';
+import type { EventBus, ReplayResult, Unsubscribe } from '@/core/realtime/event-bus';
 
 const encoder = new TextEncoder();
 const PING_INTERVAL_MS = 15_000;
@@ -31,6 +31,20 @@ export async function shouldRefreshForCursor(
   if (after === 0) return false;
   const current = Number(await bus.getCurrentSeq(boardId));
   return Number.isFinite(current) && current < after;
+}
+
+export function shouldRefreshForReplayGap(
+  afterId: string | null,
+  replay: ReplayResult,
+  currentSeq: string | null,
+): boolean {
+  const after = parseCursor(afterId);
+  if (after === 0) return false;
+  const current = Number(currentSeq ?? 0);
+  if (!Number.isFinite(current) || current <= after) return false;
+  const oldest = replay.oldestId === null ? null : Number(replay.oldestId);
+  if (oldest === null) return true;
+  return Number.isFinite(oldest) && oldest > after + 1;
 }
 
 export function createBoardEventStream(
@@ -67,20 +81,36 @@ export function createBoardEventStream(
         enqueue(frameBoardEvent(event));
       };
 
-      unsubscribe = await bus.subscribe(boardId, (event) => {
+      const resolvedUnsubscribe = await bus.subscribe(boardId, (event) => {
         if (!live) buffered.push(event);
         else enqueueEvent(event);
       });
+      if (closed) {
+        await resolvedUnsubscribe();
+        return;
+      }
+      unsubscribe = resolvedUnsubscribe;
 
       if (await shouldRefreshForCursor(bus, boardId, afterId)) {
+        if (closed) return;
         enqueue(frameRefreshEvent());
         await cleanup();
         controller.close();
         return;
       }
+      if (closed) return;
 
       const replayed = await bus.replay(boardId, String(cursor));
-      for (const event of replayed) enqueueEvent(event);
+      if (closed) return;
+      const currentSeq = await bus.getCurrentSeq(boardId);
+      if (closed) return;
+      if (shouldRefreshForReplayGap(afterId, replayed, currentSeq)) {
+        enqueue(frameRefreshEvent());
+        await cleanup();
+        controller.close();
+        return;
+      }
+      for (const event of replayed.events) enqueueEvent(event);
 
       live = true;
       for (const event of buffered.sort((a, b) => eventId(a) - eventId(b))) enqueueEvent(event);
