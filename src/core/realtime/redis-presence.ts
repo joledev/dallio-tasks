@@ -14,15 +14,23 @@ export class RedisPresenceStore implements PresenceStore {
     private readonly now: () => number = () => Date.now(),
   ) {}
 
+  // join/leave run as atomic Lua so no other connection's INCR can interleave between a leave's DECR
+  // and its ZREM (a fast tab-reload race that would otherwise remove a still-active participant and emit
+  // a false participant.left). KEYS = [connKey, onlineKey]; ARGV = [ttl, now, participantId].
   async join(boardId: string, participantId: string): Promise<boolean> {
-    const key = connKey(boardId, participantId);
-    const count = await this.client.incr(key);
-    await this.client
-      .multi()
-      .expire(key, CONN_TTL_SEC)
-      .zadd(onlineKey(boardId), String(this.now()), participantId)
-      .exec();
-    return count === 1;
+    const first = await this.client.eval(
+      `local c = redis.call('INCR', KEYS[1])
+       redis.call('EXPIRE', KEYS[1], ARGV[1])
+       redis.call('ZADD', KEYS[2], ARGV[2], ARGV[3])
+       if c == 1 then return 1 else return 0 end`,
+      2,
+      connKey(boardId, participantId),
+      onlineKey(boardId),
+      CONN_TTL_SEC,
+      this.now(),
+      participantId,
+    );
+    return first === 1;
   }
 
   async touch(boardId: string, participantId: string): Promise<void> {
@@ -34,14 +42,24 @@ export class RedisPresenceStore implements PresenceStore {
   }
 
   async leave(boardId: string, participantId: string): Promise<boolean> {
-    const key = connKey(boardId, participantId);
-    const count = await this.client.decr(key);
-    if (count > 0) {
-      await this.client.expire(key, CONN_TTL_SEC);
-      return false;
-    }
-    await this.client.multi().del(key).zrem(onlineKey(boardId), participantId).exec();
-    return true;
+    const last = await this.client.eval(
+      `local c = redis.call('DECR', KEYS[1])
+       if c <= 0 then
+         redis.call('DEL', KEYS[1])
+         redis.call('ZREM', KEYS[2], ARGV[3])
+         return 1
+       else
+         redis.call('EXPIRE', KEYS[1], ARGV[1])
+         return 0
+       end`,
+      2,
+      connKey(boardId, participantId),
+      onlineKey(boardId),
+      CONN_TTL_SEC,
+      this.now(),
+      participantId,
+    );
+    return last === 1;
   }
 
   async online(boardId: string): Promise<PresenceSnapshot> {

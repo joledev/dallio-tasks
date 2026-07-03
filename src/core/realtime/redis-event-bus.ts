@@ -38,7 +38,13 @@ export class RedisEventBus implements EventBus {
     // connects on subscribe(). One channel per board keeps the fan-out surgical.
     const sub = this.client.duplicate();
     const channel = channelKey(boardId);
-    await sub.subscribe(channel);
+    try {
+      await sub.subscribe(channel);
+    } catch (err) {
+      // A failed SUBSCRIBE (Redis/network trouble) must not leak the duplicated connection.
+      sub.disconnect();
+      throw err;
+    }
     sub.on('message', (_channel: string, message: string) => {
       try {
         onEvent(JSON.parse(message) as BoardEvent);
