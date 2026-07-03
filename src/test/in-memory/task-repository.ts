@@ -80,6 +80,7 @@ export class InMemoryTaskRepository implements TaskRepository {
       priority: data.priority,
       boardId: data.boardId,
       assigneeParticipantId: data.assigneeParticipantId,
+      position: data.position ?? 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -96,6 +97,7 @@ export class InMemoryTaskRepository implements TaskRepository {
     if (data.priority !== undefined) row.priority = data.priority;
     if (data.assigneeParticipantId !== undefined)
       row.assigneeParticipantId = data.assigneeParticipantId;
+    if (data.position !== undefined) row.position = data.position;
     row.updatedAt = new Date();
     return this.materialize(row);
   }

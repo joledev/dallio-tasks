@@ -7,11 +7,14 @@ import { taskKeys, boardTaskKeys } from '@/app/_lib/query-keys';
 import { messageFor } from '@/app/_lib/errors';
 import { useStatuses } from '@/app/_hooks/use-statuses';
 import { useOptionalBoard } from '@/app/_components/board-context';
-import type { TaskDTO, Paginated } from '@/app/_lib/types';
+import {
+  beginOptimisticTaskPatch,
+  invalidateTaskLists,
+  rollbackTaskPatch,
+  type OptimisticContext,
+} from '@/app/_lib/board-cache';
+import type { TaskDTO } from '@/app/_lib/types';
 import type { CreateTaskInput, UpdateTaskInput } from '@/core/tasks/schema';
-
-type ListSnapshot = Array<[QueryKey, Paginated<TaskDTO> | undefined]>;
-type OptimisticContext = { previous: ListSnapshot };
 
 // Shared optimistic machinery for the fast inline paths (status / priority / assign): cancel in-flight
 // list queries, snapshot every cached page, patch the target item across all pages, and expose a
@@ -41,28 +44,18 @@ export function useTaskMutations() {
     return partial;
   };
 
-  const patchCachedTask = (id: string, partial: Partial<TaskDTO>) => {
-    queryClient.setQueriesData<Paginated<TaskDTO>>({ queryKey: listKey }, (old) => {
-      if (!old) return old;
-      return { ...old, items: old.items.map((t) => (t.id === id ? { ...t, ...partial } : t)) };
-    });
-  };
-
   const beginOptimistic = async (
     id: string,
     partial: Partial<TaskDTO>,
   ): Promise<OptimisticContext> => {
-    await queryClient.cancelQueries({ queryKey: listKey });
-    const previous = queryClient.getQueriesData<Paginated<TaskDTO>>({ queryKey: listKey });
-    patchCachedTask(id, partial);
-    return { previous };
+    return beginOptimisticTaskPatch(queryClient, listKey as QueryKey, id, partial);
   };
 
   const rollback = (context: OptimisticContext | undefined) => {
-    for (const [key, data] of context?.previous ?? []) queryClient.setQueryData(key, data);
+    rollbackTaskPatch(queryClient, context);
   };
 
-  const invalidateTasks = () => queryClient.invalidateQueries({ queryKey: listKey });
+  const invalidateTasks = () => invalidateTaskLists(queryClient, listKey as QueryKey);
 
   // Create / delete: no optimistic step — mutate, then invalidate on success. Error toast is shared;
   // callers add their own success toast + dialog close.
@@ -95,6 +88,22 @@ export function useTaskMutations() {
     onSettled: invalidateTasks,
   });
 
+  const move = useMutation<
+    TaskDTO,
+    ApiError,
+    { id: string; statusId: string; position: number },
+    OptimisticContext
+  >({
+    mutationFn: ({ id, statusId, position }) => client.moveTask(id, { statusId, position }),
+    onMutate: ({ id, statusId, position }) =>
+      beginOptimistic(id, toOptimisticPatch({ statusId, position })),
+    onError: (error, _vars, context) => {
+      rollback(context);
+      toast.error(messageFor(error));
+    },
+    onSettled: invalidateTasks,
+  });
+
   // Assign — targets the board Participant (assigneeParticipantId; null = unassign). Optimistic patch of
   // the cached task with a ROLLBACK if the server rejects (e.g. a cross-board participant id → the
   // server's same-board check fails and the card snaps back to its previous assignee).
@@ -113,5 +122,5 @@ export function useTaskMutations() {
     onSettled: invalidateTasks,
   });
 
-  return { create, update, remove, assign };
+  return { create, update, move, remove, assign };
 }

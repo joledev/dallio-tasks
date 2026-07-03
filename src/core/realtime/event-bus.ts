@@ -18,6 +18,9 @@ export interface EventSubscriber {
 
   // Backlog for Last-Event-ID reconnection: events with id > afterId, oldest-first. Empty/absent → [].
   replay(boardId: string, afterId: string): Promise<BoardEvent[]>;
+
+  // Current per-board seq for reset detection. Null means no events have been published for the board.
+  getCurrentSeq(boardId: string): Promise<string | null>;
 }
 
 // The full bus binds both roles; the container exports a single instance as `eventBus`.

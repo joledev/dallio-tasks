@@ -10,6 +10,7 @@ export type Task = {
   priority: TaskPriority;
   boardId: string; // IDOR anchor (was ownerId; the board is the scope from L1b)
   assigneeParticipantId: string | null; // H1: assignment repointed from User → board Participant
+  position: number; // DnD order within a status column
 
   createdAt: Date;
   updatedAt: Date;
