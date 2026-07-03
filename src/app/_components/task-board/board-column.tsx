@@ -111,8 +111,11 @@ function ColumnQuickAdd({ statusId }: { statusId: string }) {
       cancel();
       return;
     }
-    create.mutate({ title: trimmed, statusId, priority: 'MEDIUM' }); // default priority
-    setTitle('');
+    // Clear the field only once the task is created, so a failed create keeps the typed title.
+    create.mutate(
+      { title: trimmed, statusId, priority: 'MEDIUM' }, // default priority
+      { onSuccess: () => setTitle('') },
+    );
   };
 
   if (!adding) {
