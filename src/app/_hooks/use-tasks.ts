@@ -1,16 +1,24 @@
 'use client';
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import { api } from '@/app/_lib/api';
 import { taskKeys, type TaskListFilters } from '@/app/_lib/query-keys';
+import { boardTasksQueryOptions } from '@/app/_lib/board-queries';
+import { useOptionalBoard } from '@/app/_components/board-context';
+import type { Paginated, TaskDTO } from '@/app/_lib/types';
 
-// Reads the task list keyed by the *effective* filters. `keepPreviousData` avoids an empty flash
-// while paging, tweaking filters, or toggling views — the board's effective query drops `status` and
-// forces size 100, so its key differs from the table's and switching views triggers a refetch.
+// Reads the task list keyed by the *effective* filters. This is the shared data seam: under a
+// BoardProvider it becomes the token-scoped board query (namespaced key, `enabled: isJoined`, and NO
+// `keepPreviousData` so a token change can't flash board A's rows — UI-H1/H2); on the flat owner `/`
+// surface (no provider) it keeps the original flat behavior, including `keepPreviousData` for paging.
 export function useTasks(effectiveFilters: TaskListFilters) {
-  return useQuery({
-    queryKey: taskKeys.list(effectiveFilters),
-    queryFn: () => api.listTasks(effectiveFilters),
-    placeholderData: keepPreviousData,
-  });
+  const board = useOptionalBoard();
+  const options: UseQueryOptions<Paginated<TaskDTO>> = board
+    ? boardTasksQueryOptions(board.token, effectiveFilters, board.isJoined)
+    : {
+        queryKey: taskKeys.list(effectiveFilters),
+        queryFn: () => api.listTasks(effectiveFilters),
+        placeholderData: keepPreviousData,
+      };
+  return useQuery(options);
 }

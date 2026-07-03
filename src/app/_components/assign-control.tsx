@@ -1,18 +1,35 @@
 'use client';
 
+import { useOptionalBoard } from '@/app/_components/board-context';
+import { BoardAssignControl } from '@/app/_components/board-assign-control';
 import { cn } from '@/lib/utils';
 
-// H1 repointed assignment from Users → board Participants. The participant picker ships with the board
-// view (next pass), so the owner UI renders a NON-INTERACTIVE placeholder instead of a control that
-// would post a User id into the participant-scoped assign endpoint (which would always 404). No
-// mutation is fired from here, and no participant id is resolved against the user map.
+// The assignee control seam. On the guest board (under a BoardProvider) it renders the interactive
+// participant picker (H1 re-enable); on the owner flat `/` surface it stays a NON-INTERACTIVE
+// placeholder — the flat surface has no participant registry yet (that returns in L4a with owner-side
+// participant management), and posting a User id into the participant-scoped assign endpoint would
+// always 404. So no mutation fires from the owner variant, and no id is resolved against the user map.
 export function AssignControl({
+  taskId,
   assigneeParticipantId,
   className,
 }: {
+  taskId: string;
   assigneeParticipantId: string | null;
   className?: string;
 }) {
+  const board = useOptionalBoard();
+
+  if (board) {
+    return (
+      <BoardAssignControl
+        taskId={taskId}
+        assigneeParticipantId={assigneeParticipantId}
+        className={className}
+      />
+    );
+  }
+
   return (
     <div
       title="Assignment moves to board participants (coming with the board view)"

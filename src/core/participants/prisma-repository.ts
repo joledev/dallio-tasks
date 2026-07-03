@@ -34,4 +34,13 @@ export class PrismaParticipantRepository implements ParticipantRepository {
   countByBoard(boardId: string) {
     return prisma.participant.count({ where: { boardId } });
   }
+
+  async listByBoard(boardId: string) {
+    // Board-scoped, oldest-first — a stable order for the picker/filter. Read-only; no schema change.
+    const rows = await prisma.participant.findMany({
+      where: { boardId },
+      orderBy: { joinedAt: 'asc' },
+    });
+    return rows.map(toParticipant);
+  }
 }

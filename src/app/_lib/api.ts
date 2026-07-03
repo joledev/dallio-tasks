@@ -2,7 +2,8 @@ import type { ErrorCode, Result } from '@/core/shared/envelope';
 import { MAX_PAGE_SIZE } from '@/core/shared/pagination';
 import type { CreateTaskInput, UpdateTaskInput, AssignTaskInput } from '@/core/tasks/schema';
 import type { CreateStatusInput } from '@/core/statuses/schema';
-import type { TaskDTO, UserDTO, StatusDTO, Paginated } from './types';
+import type { JoinBoardInput } from '@/core/participants/schema';
+import type { TaskDTO, UserDTO, StatusDTO, GuestParticipantDTO, Paginated } from './types';
 import type { TaskListFilters } from './query-keys';
 
 // The single typed error the whole UI reasons about. It carries the envelope's closed `code` so
@@ -100,3 +101,50 @@ export const api = {
       request<StatusDTO>('/api/statuses', { method: 'POST', body: JSON.stringify(body) }),
   },
 };
+
+// The token-scoped client for the guest board. Every method targets `/api/b/${token}/…`, so a client
+// built for board A can never hit board B (the token is baked into the closure). All mutations send a
+// JSON body → `Content-Type: application/json`, which the server's `guestCsrfCheck` requires. The raw
+// token here is the PUBLIC shareToken from the URL — never the httpOnly session cookie (which the
+// client can't read); identity is proved by the cookie the browser attaches automatically.
+export function boardApi(token: string) {
+  const base = `/api/b/${encodeURIComponent(token)}`;
+  return {
+    // Join sets the httpOnly session cookie server-side; the body is ignored by the caller (identity
+    // never comes back to JS). We only need to know success vs. a typed ApiError.
+    join: (body: JoinBoardInput) =>
+      request<{ boardId: string }>(`${base}/join`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    listTasks: (filters: TaskListFilters) =>
+      request<Paginated<TaskDTO>>(`${base}/tasks${toQueryString(filters)}`),
+
+    createTask: (body: CreateTaskInput) =>
+      request<TaskDTO>(`${base}/tasks`, { method: 'POST', body: JSON.stringify(body) }),
+
+    updateTask: (id: string, body: UpdateTaskInput) =>
+      request<TaskDTO>(`${base}/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+    deleteTask: (id: string) => request<null>(`${base}/tasks/${id}`, { method: 'DELETE' }),
+
+    // Assignment targets the board Participant (assigneeParticipantId), not a User (H1).
+    assignTask: (id: string, body: AssignTaskInput) =>
+      request<TaskDTO>(`${base}/tasks/${id}/assign`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    statuses: {
+      list: () => request<StatusDTO[]>(`${base}/statuses`),
+      create: (body: CreateStatusInput) =>
+        request<StatusDTO>(`${base}/statuses`, { method: 'POST', body: JSON.stringify(body) }),
+    },
+
+    // The picker + assignee-filter source. Guest DTO only — `{ id, displayName, color }` (UI-H4).
+    listParticipants: () => request<GuestParticipantDTO[]>(`${base}/participants`),
+  };
+}
+
+export type BoardApi = ReturnType<typeof boardApi>;

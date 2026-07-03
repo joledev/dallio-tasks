@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { respond, handle } from './respond';
+import { respond, handle, handleGuest } from './respond';
 import { ok, err, type ErrorCode } from '@/core/shared/envelope';
 
 describe('respond — Result → HTTP status', () => {
@@ -37,5 +37,28 @@ describe('handle — unexpected throw is contained', () => {
     const res = await handle(async () => ok('done'), 201);
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ ok: true, data: 'done' });
+  });
+});
+
+describe('handleGuest — UI-H3 no-store on the guest response path', () => {
+  it('stamps Cache-Control: no-store on a successful guest response (e.g. a GET)', async () => {
+    const res = await handleGuest(async () => ok({ items: [] }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(await res.json()).toEqual({ ok: true, data: { items: [] } });
+  });
+
+  it('stamps no-store on an error response too (e.g. pre-join UNAUTHORIZED)', async () => {
+    const res = await handleGuest(async () => err('UNAUTHORIZED', 'Not joined'));
+    expect(res.status).toBe(401);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('stamps no-store even on a contained internal error', async () => {
+    const res = await handleGuest(async () => {
+      throw new Error('boom');
+    });
+    expect(res.status).toBe(500);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 });

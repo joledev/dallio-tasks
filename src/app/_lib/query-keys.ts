@@ -18,3 +18,22 @@ export const userKeys = {
 export const statusKeys = {
   all: ['statuses'] as const,
 };
+
+// Token-namespaced keys for the guest board (`/b/[token]`). Every key is prefixed with
+// `['board', token, …]`, so two boards NEVER share a cache entry and `removeQueries({ queryKey:
+// boardKeys(token) })` wipes exactly one board's tasks/statuses/participants and nothing else
+// (UI-H1/H2 cross-board isolation). These live alongside — not replacing — the flat owner keys above.
+export const boardKeys = (token: string) => ['board', token] as const;
+
+export const boardTaskKeys = (token: string) => ({
+  all: [...boardKeys(token), 'tasks'] as const,
+  list: (f: TaskListFilters) => [...boardKeys(token), 'tasks', 'list', f] as const,
+});
+
+export const boardStatusKeys = (token: string) => ({
+  all: [...boardKeys(token), 'statuses'] as const,
+});
+
+export const boardParticipantKeys = (token: string) => ({
+  all: [...boardKeys(token), 'participants'] as const,
+});
