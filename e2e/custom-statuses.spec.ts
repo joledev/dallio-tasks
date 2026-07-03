@@ -1,13 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
-import { resetDatabase, OWNER_ID } from '../prisma/seed-data';
+import { resetDatabase, SEED_BOARD_ID } from '../prisma/seed-data';
 
 // End-to-end coverage for the custom-statuses + mobile-UI feature.
 //
 // Determinism note: `resetDatabase` deletes tasks and upserts the three canonical statuses, but it does
 // NOT delete custom statuses (a status in use would trip the `onDelete: Restrict` FK). A custom status
 // created by one test therefore survives into the next run and would collide on its unique
-// `(ownerId, slug)` — a second "Staging" create returns CONFLICT. So we reset AND prune non-canonical
+// `(boardId, slug)` — a second "Staging" create returns CONFLICT. So we reset AND prune non-canonical
 // statuses before each test (safe: reset already removed every task, so the pruned status has no rows).
 const CANONICAL = ['todo', 'in_progress', 'done'];
 
@@ -16,7 +16,7 @@ async function resetAndPrune(): Promise<void> {
   try {
     await resetDatabase(prisma);
     await prisma.status.deleteMany({
-      where: { ownerId: OWNER_ID, slug: { notIn: CANONICAL } },
+      where: { boardId: SEED_BOARD_ID, slug: { notIn: CANONICAL } },
     });
   } finally {
     await prisma.$disconnect();
