@@ -10,6 +10,7 @@ export const ERROR_MESSAGE: Record<ErrorCode, string> = {
   NOT_FOUND: 'That task no longer exists — the list has been refreshed.',
   CONFLICT: 'That value conflicts with an existing record.',
   LIMIT_EXCEEDED: 'This board is full.',
+  RATE_LIMITED: 'Too many requests — please slow down and try again shortly.',
   INTERNAL: 'Something went wrong. Please try again.',
 };
 

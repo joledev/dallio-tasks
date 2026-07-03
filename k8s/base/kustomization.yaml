@@ -12,6 +12,9 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  # Real-time broker (Deployment + Service). A directory base, not loose files, to stay within
+  # `kubectl kustomize`'s RootOnly load restriction. The app reaches it at redis://redis:6379.
+  - ../redis
 
 # Real Secrets (dallio-tasks-app, dallio-postgres, ghcr-pull) are created
 # out-of-band via `kubectl create secret` — see secret.example.yaml. They are
