@@ -59,11 +59,27 @@ export function guestCsrfCheck(req: Request): Result<null> {
   const origin = req.headers.get('origin');
   let originOk = false;
   if (origin) {
+    // Compare by HOST, not the full origin. Behind a TLS-terminating proxy (Traefik) `req.url` is the
+    // internal http URL, so `new URL(req.url).origin` (http://…) never equals the browser's https Origin
+    // — a same-origin Join would be wrongly rejected. The forwarded/Host header carries the real public
+    // host; the http↔https proto gap is a proxy artifact, not a cross-origin request.
+    let originHost: string | null = null;
     try {
-      originOk = new URL(origin).origin === new URL(req.url).origin;
+      originHost = new URL(origin).host;
     } catch {
-      originOk = false;
+      originHost = null;
     }
+    const reqHost =
+      req.headers.get('x-forwarded-host') ??
+      req.headers.get('host') ??
+      (() => {
+        try {
+          return new URL(req.url).host;
+        } catch {
+          return null;
+        }
+      })();
+    originOk = originHost !== null && reqHost !== null && originHost === reqHost;
     // Origin present but cross-origin → reject.
     if (!originOk) return err('FORBIDDEN', 'Cross-origin request rejected');
   }
