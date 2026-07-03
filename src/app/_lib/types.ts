@@ -6,7 +6,7 @@ import type { ActivityDTO as CoreActivityDTO } from '@/core/activity/activity';
 import type { Status, StatusRef } from '@/core/statuses/status';
 import type { StatusColor } from '@/core/statuses/schema';
 import type { Paginated } from '@/core/shared/pagination';
-import type { Board } from '@/core/boards/board';
+import type { OwnerBoardView } from '@/core/boards/board';
 
 // JSON-serialized wire shapes: over HTTP a `Date` is an ISO `string`. `Serialized<T>` maps the domain
 // types so the DTOs can't drift from `Task`/`PublicUser`/`Status` — only the Date→string edge differs.
@@ -14,7 +14,7 @@ import type { Board } from '@/core/boards/board';
 type Serialized<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] };
 
 export type TaskDTO = Serialized<Task>;
-export type BoardDTO = Serialized<Board>;
+export type BoardDTO = Serialized<OwnerBoardView>;
 export type UserDTO = Serialized<PublicUser>;
 export type StatusDTO = Serialized<Status>;
 export type ActivityDTO = CoreActivityDTO;
