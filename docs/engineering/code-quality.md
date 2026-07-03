@@ -2,7 +2,7 @@
 
 > Companion to `guidelines.md` (architecture/security). This file is about **craft**: writing
 > the *least* code that clearly solves the problem. Quality over quantity — always. Reviewers and
-> the agent fleet check against this. When a rule and pragmatism collide, prefer the simpler code
+> CI checks against this. When a rule and pragmatism collide, prefer the simpler code
 > that still satisfies the rule, and say why.
 
 ## 0. Ethos

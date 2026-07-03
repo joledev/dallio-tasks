@@ -100,11 +100,9 @@ src/
 ## 7. Git & commits
 
 - Trunk-based on `main`. Short branches: `feat/… fix/… chore/… docs/… test/… ci/…`.
-- **Conventional Commits**, human and specific. One small focused PR per change; squash-merge.
-- **No AI-authorship trailers or AI-generated comments in committed code.** Commits reflect human
-  authorship and review responsibility. (AI-assisted workflow is disclosed once in the README.)
-- **HARD RULE for all tools/agents: never run `git commit`, `git push`, or open/approve PRs. The human
-  does that after review.**
+- **Conventional Commits**, specific and scoped. One small focused PR per change; squash-merge.
+- Every change lands through a pull request with review before merge — the history reflects
+  deliberate, reviewed authorship, not noise.
 
 ## 8. Documentation
 
