@@ -26,40 +26,110 @@ model User {
   ownedTasks    Task[]   @relation("TaskOwner")
   assignedTasks Task[]   @relation("TaskAssignee")
   statuses      Status[]
+  boards        Board[] // Fase 2: a user owns many boards (the board is the guest tenant)
+}
+
+// Fase 2 (L1a expand) — the collaborative tenant. A user owns many boards; each board carries an
+// unguessable shareToken (the /b/<token> URL + QR). Board-scoping of Task/Status arrives additively
+// here; the code cutover (ownerId → boardId) is L1b, the column drops are L1c.
+model Board {
+  id         String   @id @default(uuid()) @db.Uuid
+  ownerId    String   @db.Uuid // the owning user (board dashboard authz anchor)
+  name       String
+  shareToken String   @unique // unguessable, URL-safe; the guest entry point
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks        Task[]
+  statuses     Status[]
+  participants Participant[]
+  activities   Activity[]
+
+  @@index([ownerId])
+}
+
+// Fase 2 (L1a expand) — a guest on a board. Identity is the opaque cookie whose sha256 lands in
+// sessionTokenHash (Q5 design B — no SESSION_SECRET). L1b issues/validates the cookie; L1a only ships
+// the column so no second migration is needed.
+model Participant {
+  id               String   @id @default(uuid()) @db.Uuid
+  boardId          String   @db.Uuid
+  displayName      String
+  color            String? // palette token, null → neutral
+  sessionTokenHash String? // sha256 of the opaque guest-session token (design B); set in L1b
+  joinedAt         DateTime @default(now()) @db.Timestamptz(6)
+  lastSeenAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  board         Board      @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdTasks  Task[]     @relation("TaskCreatedBy")
+  assignedTasks Task[]     @relation("TaskAssigneeParticipant")
+  activities    Activity[]
+
+  @@index([boardId])
+}
+
+// Fase 2 (L1a expand) — append-only board audit log. taskId is a SOFT ref (no FK) so it survives task
+// deletion (L3). No update/delete surface exists on the repo; append-only is the immutability control.
+model Activity {
+  id            String   @id @default(uuid()) @db.Uuid
+  boardId       String   @db.Uuid
+  participantId String?  @db.Uuid
+  action        String
+  taskId        String?  @db.Uuid // soft ref — intentionally NO FK
+  meta          Json?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  board       Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+  @@index([boardId, createdAt])
 }
 
 model Status {
   id        String   @id @default(uuid()) @db.Uuid
-  ownerId   String   @db.Uuid // scope + authz anchor (→ boardId in Fase 2)
+  ownerId   String   @db.Uuid // legacy scope + authz anchor (DB NOT NULL dropped in L1a; column dropped in L1c)
+  boardId   String?  @db.Uuid // Fase 2 board scope (nullable in expand; SET NOT NULL in L1c)
   name      String // display: "Staging"
   slug      String // stable key: "staging" (server-derived, dedupe)
   position  Int // column order; append-on-create
   color     String? // palette TOKEN, null → neutral
-  isDefault Boolean  @default(false) // the status new tasks receive (one per owner)
+  isDefault Boolean  @default(false) // the status new tasks receive (one per scope)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  board Board? @relation(fields: [boardId], references: [id], onDelete: Cascade)
   tasks Task[]
 
-  @@unique([ownerId, slug]) // dedupe within scope
+  @@unique([ownerId, slug]) // legacy dedupe within owner scope (kept until L1c)
+  @@unique([boardId, slug]) // Fase 2 dedupe within board scope (protects L1b board-scoped writes)
   @@index([ownerId, position]) // list ordered by column position
+  // NB: the per-scope single-isDefault partial unique indexes (owner + board) are created in raw SQL
+  // in the migration — Prisma cannot express `WHERE "isDefault"` partial uniques in the schema.
 }
 
 model Task {
-  id          String   @id @default(uuid()) @db.Uuid
-  title       String
-  description String?
-  statusId    String   @db.Uuid // FK → Status (was: status Status @default(TODO))
-  priority    Priority @default(MEDIUM)
-  ownerId     String   @db.Uuid // authorization anchor for every task-by-id operation
-  assigneeId  String?  @db.Uuid // nullable assignment
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  id                     String   @id @default(uuid()) @db.Uuid
+  title                  String
+  description            String?
+  statusId               String   @db.Uuid // FK → Status (was: status Status @default(TODO))
+  priority               Priority @default(MEDIUM)
+  ownerId                String   @db.Uuid // legacy authz anchor (DB NOT NULL dropped in L1a; column dropped in L1c)
+  boardId                String?  @db.Uuid // Fase 2 board scope (nullable in expand; SET NOT NULL in L1c)
+  assigneeId             String?  @db.Uuid // legacy assignment (→User; dropped in L1c)
+  createdByParticipantId String?  @db.Uuid // Fase 2 attribution (guest who created the task)
+  assigneeParticipantId  String?  @db.Uuid // Fase 2 assignment (→Participant; same-board check in L1b)
+  position               Int      @default(0) // DnD order within a status column (used from L2b)
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(6)
 
-  owner    User   @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  assignee User?  @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  status   Status @relation(fields: [statusId], references: [id], onDelete: Restrict) // BLOCK delete-in-use
+  owner               User         @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  assignee            User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  status              Status       @relation(fields: [statusId], references: [id], onDelete: Restrict) // BLOCK delete-in-use
+  board               Board?       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdBy           Participant? @relation("TaskCreatedBy", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
+  assigneeParticipant Participant? @relation("TaskAssigneeParticipant", fields: [assigneeParticipantId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, createdAt]) // owner-scoped list, default sort
   @@index([ownerId, statusId]) // owner-scoped status filter (replaces [ownerId, status])
