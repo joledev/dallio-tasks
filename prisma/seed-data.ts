@@ -4,13 +4,26 @@ import type { PrismaClient } from '@prisma/client';
 // Keep in sync with SEED_OWNER_ID in .env / .env.example.
 export const OWNER_ID = process.env.SEED_OWNER_ID ?? '00000000-0000-4000-8000-000000000001';
 
+// Fase 2 (L1a): the seed owner's demo board. Fixed id/token so e2e and the L1a expand migration agree
+// (the migration hard-codes this same id/token for the SEED owner's per-owner board). `/b/<token>` is
+// the guest entry point.
+export const SEED_BOARD_ID = '00000000-0000-4000-8000-0000000000b0';
+export const SEED_BOARD_TOKEN = 'demo-board-share-token';
+
 const DEMO_USERS = [
   { email: 'ada@dallio.local', name: 'Ada Lovelace' },
   { email: 'linus@dallio.local', name: 'Linus Torvalds' },
 ] as const;
 
-// The 3 canonical statuses, scoped to OWNER_ID. Fixed ids so e2e stays stable across re-seeds.
-// One default per owner (todo); position is the board-column order; color is a palette token.
+// Fase 2 (L1a): demo guests on the seed board, fixed ids so re-seeds are idempotent and the seeded
+// tasks can reference them. sessionTokenHash stays NULL here (L1b issues the opaque cookie).
+export const SEED_PARTICIPANTS = [
+  { id: '00000000-0000-4000-8000-0000000000c1', displayName: 'Owner', color: 'blue' },
+  { id: '00000000-0000-4000-8000-0000000000c2', displayName: 'Ada Lovelace', color: 'green' },
+] as const;
+
+// The 3 canonical statuses, scoped to OWNER_ID + the seed board. Fixed ids so e2e stays stable across
+// re-seeds. One default per scope (todo); position is the board-column order; color is a palette token.
 export const SEED_STATUSES = [
   {
     id: '00000000-0000-4000-8000-000000000201',
@@ -40,6 +53,8 @@ export const SEED_STATUSES = [
 
 // The seeded tasks — one per status so the views and board columns have a known shape. `assignee`
 // is resolved to a real id at seed time; `statusSlug` is resolved to the owner's status id.
+// `assignee` maps to BOTH the legacy assigneeId(→User, still read by the L1a app) and the new
+// assigneeParticipantId(→Participant, populated for the demo board).
 export const SEED_TASKS = [
   {
     id: '00000000-0000-4000-8000-000000000101',
@@ -83,15 +98,43 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
 
   const assigneeId = { owner: OWNER_ID, ada: ada.id } as const;
 
-  // Statuses are owner-scoped; upsert by the natural key (ownerId, slug) so a fresh DB gets the fixed
-  // ids while an already-migrated DB (statuses seeded by the migration) reuses its existing rows.
+  // Fase 2 (L1a): the seed owner's demo board. Upsert by fixed id so an already-migrated DB (whose
+  // expand migration created this exact board) is reused rather than duplicated.
+  await prisma.board.upsert({
+    where: { id: SEED_BOARD_ID },
+    update: { ownerId: OWNER_ID, name: 'My Board', shareToken: SEED_BOARD_TOKEN },
+    create: {
+      id: SEED_BOARD_ID,
+      ownerId: OWNER_ID,
+      name: 'My Board',
+      shareToken: SEED_BOARD_TOKEN,
+    },
+  });
+
+  // Fase 2 (L1a): demo participants on the seed board (idempotent by fixed id).
+  const [ownerParticipant, adaParticipant] = await Promise.all(
+    SEED_PARTICIPANTS.map((pt) =>
+      prisma.participant.upsert({
+        where: { id: pt.id },
+        update: { displayName: pt.displayName, color: pt.color, boardId: SEED_BOARD_ID },
+        create: { ...pt, boardId: SEED_BOARD_ID },
+      }),
+    ),
+  );
+  const assigneeParticipantId = {
+    owner: ownerParticipant.id,
+    ada: adaParticipant.id,
+  } as const;
+
+  // Statuses are owner-scoped AND board-scoped; upsert by the natural key (ownerId, slug) so a fresh DB
+  // gets the fixed ids while an already-migrated DB (statuses seeded by the migration) reuses its rows.
   // Resolve each slug to the *actual* row id for the task FK, whichever path created it.
   const statusIdBySlug = new Map<string, string>();
   for (const { id, slug, ...status } of SEED_STATUSES) {
     const row = await prisma.status.upsert({
       where: { ownerId_slug: { ownerId: OWNER_ID, slug } },
-      update: { ...status },
-      create: { id, ownerId: OWNER_ID, slug, ...status },
+      update: { ...status, boardId: SEED_BOARD_ID },
+      create: { id, ownerId: OWNER_ID, boardId: SEED_BOARD_ID, slug, ...status },
     });
     statusIdBySlug.set(slug, row.id);
   }
@@ -100,8 +143,12 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
     const data = {
       ...task,
       ownerId: OWNER_ID,
+      boardId: SEED_BOARD_ID,
       statusId: statusIdBySlug.get(statusSlug)!,
       assigneeId: assignee ? assigneeId[assignee] : null,
+      // Fase 2 attribution: creator = the owner participant; assignee mirrored onto the participant FK.
+      createdByParticipantId: ownerParticipant.id,
+      assigneeParticipantId: assignee ? assigneeParticipantId[assignee] : null,
     };
     const { id, ...rest } = data;
     await prisma.task.upsert({ where: { id }, update: rest, create: data });
@@ -109,8 +156,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
 }
 
 // Wipe task rows before reseeding so a run starts from exactly the SEED_TASKS state, no matter what
-// earlier tests created. Users and statuses are only ever upserted, so they need no truncation
-// (deleting statuses would also trip the Task.status Restrict FK).
+// earlier tests created. Users, boards, participants and statuses are only ever upserted, so they need
+// no truncation (deleting statuses would also trip the Task.status Restrict FK).
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.task.deleteMany({});
   await seedDatabase(prisma);
