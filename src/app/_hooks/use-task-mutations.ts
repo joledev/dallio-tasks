@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { api, ApiError } from '@/app/_lib/api';
 import { taskKeys } from '@/app/_lib/query-keys';
 import { messageFor } from '@/app/_lib/errors';
+import { useStatuses } from '@/app/_hooks/use-statuses';
 import type { TaskDTO, Paginated } from '@/app/_lib/types';
 import type { CreateTaskInput, UpdateTaskInput } from '@/core/tasks/schema';
 
@@ -16,6 +17,19 @@ type OptimisticContext = { previous: ListSnapshot };
 // rollback. All list caches live under the `['tasks']` prefix.
 export function useTaskMutations() {
   const queryClient = useQueryClient();
+  const { byId: statusById } = useStatuses();
+
+  // A status change now patches an object, not a string: set both `statusId` (the board buckets on it)
+  // and the joined `status` StatusRef (the badge/name render off it) so the card re-buckets AND relabels
+  // instantly. The full ref is looked up from the cached status list the select already displays.
+  const toOptimisticPatch = (patch: UpdateTaskInput): Partial<TaskDTO> => {
+    const partial = { ...patch } as Partial<TaskDTO>;
+    if (patch.statusId) {
+      const status = statusById.get(patch.statusId);
+      if (status) partial.status = status;
+    }
+    return partial;
+  };
 
   const patchCachedTask = (id: string, partial: Partial<TaskDTO>) => {
     queryClient.setQueriesData<Paginated<TaskDTO>>({ queryKey: taskKeys.all }, (old) => {
@@ -63,7 +77,7 @@ export function useTaskMutations() {
     OptimisticContext
   >({
     mutationFn: ({ id, patch }) => api.updateTask(id, patch),
-    onMutate: ({ id, patch }) => beginOptimistic(id, patch as Partial<TaskDTO>),
+    onMutate: ({ id, patch }) => beginOptimistic(id, toOptimisticPatch(patch)),
     onError: (error, _vars, context) => {
       rollback(context);
       toast.error(messageFor(error));

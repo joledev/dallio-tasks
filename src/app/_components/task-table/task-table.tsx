@@ -21,16 +21,13 @@ import { PrioritySelect } from '@/app/_components/priority-select';
 import { AssignControl } from '@/app/_components/assign-control';
 import { TaskDialog } from '@/app/_components/task-dialog';
 import { LoadingState, EmptyState, ErrorState } from '@/app/_components/states';
+import { formatDate } from '@/app/_lib/format';
 import type { TaskDTO } from '@/app/_lib/types';
 import { PaginationControls } from './pagination-controls';
+import { TaskCardList } from './task-card-list';
 import { TaskRowActions } from './task-row-actions';
 
 type SortField = (typeof TASK_SORT_FIELDS)[number];
-
-// Deterministic date format (fixed locale + UTC) so the SSR and client renders match — a
-// locale-dependent `toLocaleDateString()` would risk a hydration mismatch.
-const dateFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' });
-const formatDate = (iso: string) => dateFmt.format(new Date(iso));
 
 // One sortable header cell. Clicking the active field flips the direction; clicking a new field
 // switches to it (ascending). The allowlist is the schema's `TASK_SORT_FIELDS`.
@@ -151,66 +148,72 @@ export function TaskTable() {
       <div
         className={cn('transition-opacity', isPlaceholderData && 'pointer-events-none opacity-60')}
       >
-        <Table className="min-w-[720px]">
-          <TableHeader>
-            <TableRow>
-              <SortableHeader
-                field="title"
-                activeSort={filters.sort}
-                activeDir={filters.dir}
-                onSort={handleSort}
-              />
-              <SortableHeader
-                field="status"
-                activeSort={filters.sort}
-                activeDir={filters.dir}
-                onSort={handleSort}
-              />
-              <SortableHeader
-                field="priority"
-                activeSort={filters.sort}
-                activeDir={filters.dir}
-                onSort={handleSort}
-              />
-              <TableHead>Assignee</TableHead>
-              <SortableHeader
-                field="createdAt"
-                activeSort={filters.sort}
-                activeDir={filters.dir}
-                onSort={handleSort}
-              />
-              <TableHead className="w-10 text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((task: TaskDTO) => (
-              <TableRow key={task.id}>
-                <TableCell className="max-w-[280px] font-medium">
-                  <span className="block truncate" title={task.title}>
-                    {task.title}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <StatusSelect taskId={task.id} status={task.status} />
-                </TableCell>
-                <TableCell>
-                  <PrioritySelect taskId={task.id} priority={task.priority} />
-                </TableCell>
-                <TableCell>
-                  <AssignControl taskId={task.id} assigneeId={task.assigneeId} />
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(task.createdAt)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <TaskRowActions task={task} />
-                </TableCell>
+        {/* Mobile: stacked cards (no horizontal scroll). md+: the sortable table. Both stay in the
+            DOM via a CSS `display` switch, so only the visible one is in the a11y/tab tree. */}
+        <TaskCardList items={items} className="md:hidden" />
+
+        <div className="hidden md:block">
+          <Table className="min-w-[720px]">
+            <TableHeader>
+              <TableRow>
+                <SortableHeader
+                  field="title"
+                  activeSort={filters.sort}
+                  activeDir={filters.dir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  field="status"
+                  activeSort={filters.sort}
+                  activeDir={filters.dir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  field="priority"
+                  activeSort={filters.sort}
+                  activeDir={filters.dir}
+                  onSort={handleSort}
+                />
+                <TableHead>Assignee</TableHead>
+                <SortableHeader
+                  field="createdAt"
+                  activeSort={filters.sort}
+                  activeDir={filters.dir}
+                  onSort={handleSort}
+                />
+                <TableHead className="w-10 text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {items.map((task: TaskDTO) => (
+                <TableRow key={task.id}>
+                  <TableCell className="max-w-[280px] font-medium">
+                    <span className="block truncate" title={task.title}>
+                      {task.title}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusSelect taskId={task.id} statusId={task.statusId} />
+                  </TableCell>
+                  <TableCell>
+                    <PrioritySelect taskId={task.id} priority={task.priority} />
+                  </TableCell>
+                  <TableCell>
+                    <AssignControl taskId={task.id} assigneeId={task.assigneeId} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(task.createdAt)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <TaskRowActions task={task} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <PaginationControls

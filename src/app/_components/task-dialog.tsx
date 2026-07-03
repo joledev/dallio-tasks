@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -34,22 +34,22 @@ import {
   createTaskSchema,
   updateTaskSchema,
   PriorityEnum,
-  StatusEnum,
   type TaskPriority,
-  type TaskStatus,
 } from '@/core/tasks/schema';
 import { ApiError } from '@/app/_lib/api';
-import { STATUS_LABEL, PRIORITY_LABEL } from '@/app/_lib/labels';
+import { PRIORITY_LABEL } from '@/app/_lib/labels';
 import { useTaskMutations } from '@/app/_hooks/use-task-mutations';
+import { useStatuses } from '@/app/_hooks/use-statuses';
+import { StatusField } from '@/app/_components/status-field';
 import type { TaskDTO } from '@/app/_lib/types';
 
-// One form shape for both modes. `status` is only surfaced (and validated) in edit mode — create
-// forbids it (the server sets TODO) and forbids assignee (assignment has its own path).
+// One form shape for both modes. Status is now a real create-time choice (the server resolves the
+// default only when `statusId` is omitted), so it is surfaced in both create and edit.
 type TaskFormValues = {
   title: string;
   description: string;
   priority: TaskPriority;
-  status: TaskStatus;
+  statusId: string;
 };
 
 type TaskDialogProps =
@@ -60,35 +60,47 @@ const emptyDefaults: TaskFormValues = {
   title: '',
   description: '',
   priority: 'MEDIUM',
-  status: 'TODO',
+  statusId: '',
 };
 
-function defaultsFor(task: TaskDTO | undefined): TaskFormValues {
-  if (!task) return emptyDefaults;
+// Create pre-selects the owner's default status (falling back to the first column) so the field is
+// never empty; edit shows the task's current status. An empty create `statusId` lets the server pick.
+function defaultsFor(task: TaskDTO | undefined, defaultStatusId: string): TaskFormValues {
+  if (!task) return { ...emptyDefaults, statusId: defaultStatusId };
   return {
     title: task.title,
     description: task.description ?? '',
     priority: task.priority,
-    status: task.status,
+    statusId: task.statusId,
   };
 }
 
 export function TaskDialog(props: TaskDialogProps) {
   const { mode, task, open, onOpenChange } = props;
   const { create, update } = useTaskMutations();
+  const { statuses } = useStatuses();
+
+  const defaultStatusId = statuses.find((s) => s.isDefault)?.id ?? statuses[0]?.id ?? '';
 
   const form = useForm<TaskFormValues>({
-    // Cast: the resolver is a create/update schema union while the form is one fixed shape (status is
-    // only submitted in edit mode) — the shapes don't line up structurally, so we assert the target.
+    // Cast: the resolver is a create/update schema union while the form is one fixed shape — the shapes
+    // don't line up structurally (optional vs required fields), so we assert the target.
     resolver: zodResolver(
       mode === 'create' ? createTaskSchema : updateTaskSchema,
     ) as Resolver<TaskFormValues>,
-    defaultValues: defaultsFor(task),
+    defaultValues: defaultsFor(task, defaultStatusId),
   });
 
-  // Refresh the form whenever it (re)opens so edit shows the latest task and create starts clean.
+  // Keep the latest default status id in a ref so the reset can read it without depending on it —
+  // otherwise a status-list refetch (e.g. an inline create-and-select) would re-run the reset and
+  // clobber the statusId that StatusField just set.
+  const defaultStatusIdRef = useRef(defaultStatusId);
+  defaultStatusIdRef.current = defaultStatusId;
+
+  // Refresh the form only when it (re)opens or the edited task changes — never when the status list
+  // updates — so edit shows the latest task, create starts clean, and an inline create-and-select sticks.
   useEffect(() => {
-    if (open) form.reset(defaultsFor(task));
+    if (open) form.reset(defaultsFor(task, defaultStatusIdRef.current));
   }, [open, task, form]);
 
   // The server re-validates and is authoritative; map a VALIDATION_ERROR's flattened field errors
@@ -110,6 +122,7 @@ export function TaskDialog(props: TaskDialogProps) {
         await create.mutateAsync({
           title: values.title,
           description: description === '' ? undefined : description,
+          statusId: values.statusId || undefined, // omitted → server resolves the default
           priority: values.priority,
         });
         toast.success('Task created.');
@@ -119,7 +132,7 @@ export function TaskDialog(props: TaskDialogProps) {
           patch: {
             title: values.title,
             description: description === '' ? null : description,
-            status: values.status,
+            statusId: values.statusId,
             priority: values.priority,
           },
         });
@@ -140,7 +153,7 @@ export function TaskDialog(props: TaskDialogProps) {
           <DialogTitle>{mode === 'create' ? 'New task' : 'Edit task'}</DialogTitle>
           <DialogDescription>
             {mode === 'create'
-              ? 'Add a task. It starts in To do and unassigned.'
+              ? 'Add a task. Pick a status or leave the default; it starts unassigned.'
               : 'Update the task details.'}
           </DialogDescription>
         </DialogHeader>
@@ -200,32 +213,21 @@ export function TaskDialog(props: TaskDialogProps) {
               )}
             />
 
-            {mode === 'edit' ? (
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {StatusEnum.options.map((value) => (
-                          <SelectItem key={value} value={value}>
-                            {STATUS_LABEL[value]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
+            <FormField
+              control={form.control}
+              name="statusId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <StatusField
+                    value={field.value || undefined}
+                    onChange={field.onChange}
+                    triggerClassName="w-full"
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

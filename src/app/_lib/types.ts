@@ -1,13 +1,17 @@
-import type { TaskStatus, TaskPriority } from '@/core/tasks/schema';
+import type { TaskPriority } from '@/core/tasks/schema';
 import type { Task } from '@/core/tasks/task';
 import type { PublicUser } from '@/core/users/user';
+import type { Status, StatusRef } from '@/core/statuses/status';
+import type { StatusColor } from '@/core/statuses/schema';
 import type { Paginated } from '@/core/shared/pagination';
 
 // JSON-serialized wire shapes: over HTTP a `Date` is an ISO `string`. `Serialized<T>` maps the domain
-// types so the DTOs can't drift from `Task`/`PublicUser` — only the Date→string edge differs.
+// types so the DTOs can't drift from `Task`/`PublicUser`/`Status` — only the Date→string edge differs.
+// `Task.status` is a nested `StatusRef` (no Date fields) so it passes through unchanged.
 type Serialized<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] };
 
 export type TaskDTO = Serialized<Task>;
 export type UserDTO = Serialized<PublicUser>;
+export type StatusDTO = Serialized<Status>;
 
-export type { TaskStatus, TaskPriority, Paginated };
+export type { TaskPriority, Paginated, StatusRef, StatusColor };
