@@ -12,6 +12,7 @@ const BOARD_A: Board = {
   name: 'Board A',
   shareToken: 'tok-a',
   mode: 'DIRECT',
+  protected: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

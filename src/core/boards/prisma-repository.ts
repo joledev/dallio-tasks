@@ -14,6 +14,7 @@ const toBoard = (row: PrismaBoard): Board => ({
   name: row.name,
   shareToken: row.shareToken,
   mode: row.mode,
+  protected: row.protected,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -65,9 +66,15 @@ export class PrismaBoardRepository implements BoardRepository {
     const rows = await prisma.board.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'asc' },
-      include: { _count: { select: { tasks: true } } },
+      include: {
+        _count: { select: { tasks: true, requests: { where: { status: 'PENDING' } } } },
+      },
     });
-    return rows.map((row) => ({ ...toBoard(row), taskCount: row._count.tasks }));
+    return rows.map((row) => ({
+      ...toBoard(row),
+      taskCount: row._count.tasks,
+      pendingRequestCount: row._count.requests,
+    }));
   }
 
   async createForOwner(ownerId: string, name: string) {
@@ -92,5 +99,22 @@ export class PrismaBoardRepository implements BoardRepository {
     const board = toBoard(row);
     await this.cacheByToken(board);
     return board;
+  }
+
+  async rename(id: string, name: string) {
+    const row = await prisma.board.update({ where: { id }, data: { name } }).catch(() => null);
+    if (!row) return null;
+    const board = toBoard(row);
+    await this.cacheByToken(board); // refresh the token cache so a stale name never lingers
+    return board;
+  }
+
+  async deleteById(id: string) {
+    // Idempotent: a concurrent double-resolve can call this twice for the same board; the second delete
+    // would throw P2025 (row gone) and escape as a 500. Swallow it — the board is already deleted, which
+    // is the intended end state. (Cache note: no delete/invalidate method on BoardCache, so a stale
+    // token-cache entry can outlive the row for up to TOKEN_CACHE_TTL_SEC; getByToken re-checks the DB
+    // once the TTL lapses.)
+    await prisma.board.delete({ where: { id } }).catch(() => null);
   }
 }

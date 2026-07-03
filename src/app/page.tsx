@@ -5,7 +5,19 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Clipboard, ExternalLink, Plus, QrCode } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  ArrowRight,
+  Check,
+  Clipboard,
+  ExternalLink,
+  Inbox,
+  Pencil,
+  Plus,
+  QrCode,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -15,6 +27,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -28,8 +50,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/app/_lib/api';
-import { ownerBoardKeys } from '@/app/_lib/query-keys';
-import type { BoardDTO } from '@/app/_lib/types';
+import { messageFor } from '@/app/_lib/errors';
+import { ownerBoardKeys, boardRequestKeys } from '@/app/_lib/query-keys';
+import type { BoardDTO, BoardRequestDTO } from '@/app/_lib/types';
 import { QrScannerDialog } from '@/app/_components/qr-scanner-dialog';
 
 function BoardInvite({ board }: { board: BoardDTO }) {
@@ -79,9 +102,236 @@ function BoardInvite({ board }: { board: BoardDTO }) {
   );
 }
 
+function RenameBoardDialog({
+  board,
+  open,
+  onOpenChange,
+}: {
+  board: BoardDTO;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(board.name);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName(board.name);
+      setError(null);
+    }
+  }, [open, board.name]);
+
+  const mutation = useMutation({
+    mutationFn: () => api.renameBoard(board.shareToken, { name }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ownerBoardKeys.all });
+      toast.success('Board renamed.');
+      onOpenChange(false);
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'Could not rename board.');
+    },
+  });
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    mutation.mutate();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rename board</DialogTitle>
+          <DialogDescription>Choose a new name for &quot;{board.name}&quot;.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="rename-board-name">Board name</Label>
+            <Input
+              id="rename-board-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="min-h-11"
+              autoFocus
+            />
+          </div>
+          {error ? (
+            <p role="alert" className="text-destructive text-sm">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="submit"
+              className="min-h-11 w-full sm:w-auto"
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteBoardDialog({
+  board,
+  open,
+  onOpenChange,
+}: {
+  board: BoardDTO;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => api.deleteBoard(board.shareToken),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ownerBoardKeys.all });
+      toast.success('Board deleted.');
+      onOpenChange(false);
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete board.');
+    },
+  });
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this board?</AlertDialogTitle>
+          <AlertDialogDescription>
+            &quot;{board.name}&quot; and all of its tasks will be permanently removed. This
+            can&apos;t be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={mutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault();
+              mutation.mutate();
+            }}
+            disabled={mutation.isPending}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+const REQUEST_KIND_LABEL: Record<BoardRequestDTO['kind'], string> = {
+  RENAME: 'Rename',
+  DELETE: 'Delete',
+};
+
+function BoardRequestsDialog({
+  board,
+  open,
+  onOpenChange,
+}: {
+  board: BoardDTO;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const requests = useQuery({
+    queryKey: boardRequestKeys(board.shareToken).all,
+    queryFn: () => api.listBoardRequests(board.shareToken),
+    enabled: open,
+  });
+
+  const resolve = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'reject' }) =>
+      api.resolveBoardRequest(board.shareToken, id, action),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: boardRequestKeys(board.shareToken).all }),
+        queryClient.invalidateQueries({ queryKey: ownerBoardKeys.all }),
+      ]);
+      toast.success(variables.action === 'approve' ? 'Request approved.' : 'Request rejected.');
+    },
+    onError: (err) => toast.error(messageFor(err)),
+  });
+
+  const pending = requests.data ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Pending requests</DialogTitle>
+          <DialogDescription>
+            Guests on &quot;{board.name}&quot; have asked for these changes.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-80 space-y-2 overflow-y-auto">
+          {requests.isLoading ? <Skeleton className="h-16 w-full" /> : null}
+          {!requests.isLoading && pending.length === 0 ? (
+            <p className="text-muted-foreground py-3 text-sm">No pending requests.</p>
+          ) : null}
+          {pending.map((request) => (
+            <div
+              key={request.id}
+              className="border-border flex items-center justify-between gap-3 rounded-md border p-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {REQUEST_KIND_LABEL[request.kind]}
+                  {request.kind === 'RENAME' && request.proposedName
+                    ? ` to "${request.proposedName}"`
+                    : null}
+                </p>
+                <p className="text-muted-foreground truncate text-xs">
+                  Requested by {request.requesterName ?? 'a guest'}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="min-h-9 min-w-9"
+                  disabled={resolve.isPending}
+                  aria-label="Approve request"
+                  onClick={() => resolve.mutate({ id: request.id, action: 'approve' })}
+                >
+                  <Check aria-hidden />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="min-h-9 min-w-9"
+                  disabled={resolve.isPending}
+                  aria-label="Reject request"
+                  onClick={() => resolve.mutate({ id: request.id, action: 'reject' })}
+                >
+                  <X aria-hidden />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function BoardCard({ board }: { board: BoardDTO }) {
   const href = `/b/${encodeURIComponent(board.shareToken)}`;
   const taskLabel = board.taskCount === 1 ? '1 task' : `${board.taskCount ?? 0} tasks`;
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
 
   return (
     <Card>
@@ -98,8 +348,46 @@ function BoardCard({ board }: { board: BoardDTO }) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         <BoardInvite board={board} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={() => setRenameOpen(true)}
+          >
+            <Pencil aria-hidden />
+            Rename
+          </Button>
+          {!board.protected ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 aria-hidden />
+              Delete
+            </Button>
+          ) : null}
+          {board.pendingRequestCount ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={() => setRequestsOpen(true)}
+            >
+              <Inbox aria-hidden />
+              {board.pendingRequestCount === 1
+                ? '1 request'
+                : `${board.pendingRequestCount} requests`}
+            </Button>
+          ) : null}
+        </div>
       </CardContent>
       <CardFooter>
         <Button type="button" className="min-h-11 w-full" asChild>
@@ -109,6 +397,10 @@ function BoardCard({ board }: { board: BoardDTO }) {
           </Link>
         </Button>
       </CardFooter>
+
+      <RenameBoardDialog board={board} open={renameOpen} onOpenChange={setRenameOpen} />
+      <DeleteBoardDialog board={board} open={deleteOpen} onOpenChange={setDeleteOpen} />
+      <BoardRequestsDialog board={board} open={requestsOpen} onOpenChange={setRequestsOpen} />
     </Card>
   );
 }

@@ -20,9 +20,14 @@ import type {
   PresenceSnapshotDTO,
   ProposalDTO,
   BoardModeDTO,
+  BoardRequestDTO,
 } from './types';
 import type { TaskListFilters } from './query-keys';
-import type { CreateBoardInput } from '@/core/boards/schema';
+import type { CreateBoardInput, RenameBoardInput } from '@/core/boards/schema';
+import type {
+  CreateBoardRequestInput,
+  ResolveBoardRequestInput,
+} from '@/core/board-requests/schema';
 
 // The single typed error the whole UI reasons about. It carries the envelope's closed `code` so
 // call sites (toasts, form-field mapping) can branch on it without re-parsing HTTP.
@@ -94,6 +99,24 @@ export const api = {
 
   createBoard: (body: CreateBoardInput) =>
     request<BoardDTO>('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
+
+  renameBoard: (token: string, body: RenameBoardInput) =>
+    request<BoardDTO>(`/api/boards/${encodeURIComponent(token)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  deleteBoard: (token: string) =>
+    request<null>(`/api/boards/${encodeURIComponent(token)}`, { method: 'DELETE' }),
+
+  listBoardRequests: (token: string) =>
+    request<BoardRequestDTO[]>(`/api/boards/${encodeURIComponent(token)}/requests`),
+
+  resolveBoardRequest: (token: string, id: string, action: ResolveBoardRequestInput['action']) =>
+    request<BoardRequestDTO>(
+      `/api/boards/${encodeURIComponent(token)}/requests/${encodeURIComponent(id)}`,
+      { method: 'POST', body: JSON.stringify({ action }) },
+    ),
 
   listTasks: (filters: TaskListFilters) =>
     request<Paginated<TaskDTO>>(`/api/tasks${toQueryString(filters)}`),
@@ -198,6 +221,13 @@ export function boardApi(token: string, present = false) {
       set: (body: BoardModeInput) =>
         request<BoardModeDTO>(`${base}/mode`, { method: 'POST', body: JSON.stringify(body) }),
     },
+
+    // Guests never rename/delete directly — this files a request the owner approves/rejects.
+    requestBoardChange: (body: CreateBoardRequestInput) =>
+      request<BoardRequestDTO>(`${base}/requests`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   };
 }
 

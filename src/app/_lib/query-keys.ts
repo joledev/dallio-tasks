@@ -19,6 +19,11 @@ export const ownerBoardKeys = {
   all: ['owner-boards'] as const,
 };
 
+// The owner-dashboard pending-request queue for a single board, addressed by shareToken.
+export const boardRequestKeys = (token: string) => ({
+  all: ['owner-boards', token, 'requests'] as const,
+});
+
 export const statusKeys = {
   all: ['statuses'] as const,
 };
