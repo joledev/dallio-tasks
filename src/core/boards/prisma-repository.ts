@@ -16,7 +16,9 @@ const toBoard = (row: PrismaBoard): Board => ({
 
 export class PrismaBoardRepository implements BoardRepository {
   async getByOwnerId(ownerId: string) {
-    const row = await prisma.board.findFirst({ where: { ownerId } });
+    // Deterministic pick: an owner is 1:1 with a board today, but multi-board-per-owner is coming —
+    // oldest-first keeps the interim "acting board" stable rather than silently varying by row order.
+    const row = await prisma.board.findFirst({ where: { ownerId }, orderBy: { createdAt: 'asc' } });
     return row ? toBoard(row) : null;
   }
 
