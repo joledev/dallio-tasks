@@ -10,6 +10,7 @@ import { statusRepository } from '@/core/statuses/container';
 import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
 import { eventBus } from '@/core/realtime/container';
+import { activityRepository } from '@/core/activity/container';
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -26,7 +27,14 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!actor.ok) return actor;
     const parsed = parse(createTaskSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return createTask(taskRepository, statusRepository, actor.data, parsed.data, eventBus);
+    return createTask(
+      taskRepository,
+      statusRepository,
+      actor.data,
+      parsed.data,
+      eventBus,
+      activityRepository,
+    );
   }, 201);
 }
 

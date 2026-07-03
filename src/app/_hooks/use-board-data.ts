@@ -4,7 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useTasks } from '@/app/_hooks/use-tasks';
 import { useStatuses } from '@/app/_hooks/use-statuses';
 import { useTaskMutations } from '@/app/_hooks/use-task-mutations';
-import { boardParticipantsQueryOptions } from '@/app/_lib/board-queries';
+import {
+  boardActivityQueryOptions,
+  boardParticipantsQueryOptions,
+  boardPresenceQueryOptions,
+} from '@/app/_lib/board-queries';
 import { useBoard, type BoardContextValue } from '@/app/_components/board-context';
 import type { TaskListFilters } from '@/app/_lib/query-keys';
 
@@ -43,4 +47,20 @@ export function useBoardTaskMutations(token: string) {
 export function useBoardParticipants(token: string) {
   const board = useAssertedBoard(token);
   return useQuery(boardParticipantsQueryOptions(token, board.isJoined));
+}
+
+export function useBoardPresence(token: string) {
+  const board = useAssertedBoard(token);
+  const query = useQuery(boardPresenceQueryOptions(token, board.isJoined));
+  return {
+    ...query,
+    participants: query.data?.participants ?? [],
+    onlineCount: query.data?.onlineCount ?? 0,
+  };
+}
+
+export function useBoardActivity(token: string) {
+  const board = useAssertedBoard(token);
+  const query = useQuery(boardActivityQueryOptions(token, board.isJoined));
+  return { ...query, activity: query.data ?? [] };
 }

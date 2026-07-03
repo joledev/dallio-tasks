@@ -4,6 +4,8 @@ import { FilterBar } from '@/app/_components/filter-bar';
 import { ViewToggle } from '@/app/_components/view-toggle';
 import { TaskTable } from '@/app/_components/task-table/task-table';
 import { TaskBoard } from '@/app/_components/task-board/task-board';
+import { ActivityFeed } from '@/app/_components/activity-feed';
+import { PresenceStrip } from '@/app/_components/presence-strip';
 import { useTaskFilters } from '@/app/_hooks/use-task-filters';
 
 // The joined-guest board. This is the SAME composition as the flat `/` dashboard — FilterBar +
@@ -20,9 +22,13 @@ export function BoardView({ boardName }: { boardName: string }) {
         <ViewToggle />
       </header>
 
-      <div className="space-y-4">
-        <FilterBar />
-        {view === 'board' ? <TaskBoard /> : <TaskTable />}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0 space-y-4">
+          <PresenceStrip />
+          <FilterBar />
+          {view === 'board' ? <TaskBoard /> : <TaskTable />}
+        </div>
+        <ActivityFeed />
       </div>
     </div>
   );

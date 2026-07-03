@@ -4,6 +4,7 @@ import { InMemoryTaskRepository } from '@/test/in-memory/task-repository';
 import { InMemoryParticipantRepository } from '@/test/in-memory/participant-repository';
 import { InMemoryStatusRepository } from '@/test/in-memory/status-repository';
 import { InMemoryEventBus } from '@/test/in-memory/event-bus';
+import { InMemoryActivityRepository } from '@/test/in-memory/activity-repository';
 import type { Actor } from '@/core/shared/actor';
 import {
   createTask,
@@ -130,6 +131,36 @@ describe('createTask — server-resolved status', () => {
     expect(createTaskSchema.safeParse({ title: 'Fine', priority: 'LOW' }).success).toBe(true);
     expect(updateTaskSchema.safeParse({ title: 'Fine' }).success).toBe(true);
     expect(assignTaskSchema.safeParse({ assigneeParticipantId: null }).success).toBe(true);
+  });
+});
+
+describe('task activity', () => {
+  it('appends immutable activity and keeps taskId after task deletion', async () => {
+    const { statusRepo, taskRepo } = makeRepos();
+    await seedStatuses(statusRepo, BOARD_A);
+    const activityRepo = new InMemoryActivityRepository();
+    const bus = new InMemoryEventBus();
+    const actor: Actor = { boardId: BOARD_A, participantId: randomUUID() };
+
+    const created = await createTask(
+      taskRepo,
+      statusRepo,
+      actor,
+      createTaskSchema.parse({ title: 'Soft ref task' }),
+      bus,
+      activityRepo,
+    );
+    if (!created.ok) throw new Error('expected create ok');
+
+    const deleted = await deleteTask(taskRepo, actor, created.data.id, bus, activityRepo);
+    expect(deleted.ok).toBe(true);
+
+    expect('update' in activityRepo).toBe(false);
+    expect('delete' in activityRepo).toBe(false);
+    expect(activityRepo.rows.map((row) => row.action)).toEqual(['task.created', 'task.deleted']);
+    expect(activityRepo.rows[1].taskId).toBe(created.data.id);
+    expect(await taskRepo.get(created.data.id, BOARD_A)).toBeNull();
+    expect(bus.published.filter((event) => event.type === 'activity.appended')).toHaveLength(2);
   });
 });
 

@@ -8,7 +8,15 @@ import type {
 } from '@/core/tasks/schema';
 import type { CreateStatusInput } from '@/core/statuses/schema';
 import type { JoinBoardInput } from '@/core/participants/schema';
-import type { TaskDTO, UserDTO, StatusDTO, GuestParticipantDTO, Paginated } from './types';
+import type {
+  ActivityDTO,
+  TaskDTO,
+  UserDTO,
+  StatusDTO,
+  GuestParticipantDTO,
+  Paginated,
+  PresenceSnapshotDTO,
+} from './types';
 import type { TaskListFilters } from './query-keys';
 
 // The single typed error the whole UI reasons about. It carries the envelope's closed `code` so
@@ -158,6 +166,10 @@ export function boardApi(token: string) {
 
     // The picker + assignee-filter source. Guest DTO only — `{ id, displayName, color }` (UI-H4).
     listParticipants: () => request<GuestParticipantDTO[]>(`${base}/participants`),
+
+    presence: () => request<PresenceSnapshotDTO>(`${base}/presence`),
+
+    activity: () => request<ActivityDTO[]>(`${base}/activity`),
   };
 }
 

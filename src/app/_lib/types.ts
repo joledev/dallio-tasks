@@ -2,6 +2,7 @@ import type { TaskPriority } from '@/core/tasks/schema';
 import type { Task } from '@/core/tasks/task';
 import type { PublicUser } from '@/core/users/user';
 import type { GuestParticipant } from '@/core/participants/participant';
+import type { ActivityDTO as CoreActivityDTO } from '@/core/activity/activity';
 import type { Status, StatusRef } from '@/core/statuses/status';
 import type { StatusColor } from '@/core/statuses/schema';
 import type { Paginated } from '@/core/shared/pagination';
@@ -14,8 +15,14 @@ type Serialized<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] };
 export type TaskDTO = Serialized<Task>;
 export type UserDTO = Serialized<PublicUser>;
 export type StatusDTO = Serialized<Status>;
+export type ActivityDTO = CoreActivityDTO;
 // The guest participant projection over the wire (no Date fields → the shape is unchanged): the ONLY
 // participant shape the client ever sees. No `boardId`, no `sessionTokenHash` (UI-H4).
 export type GuestParticipantDTO = Serialized<GuestParticipant>;
+
+export type PresenceSnapshotDTO = {
+  participants: GuestParticipantDTO[];
+  onlineCount: number;
+};
 
 export type { TaskPriority, Paginated, StatusRef, StatusColor };

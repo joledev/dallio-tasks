@@ -2,6 +2,10 @@ import { ok, err, type Result } from '@/core/shared/envelope';
 import type { Actor } from '@/core/shared/actor';
 import { generateSessionToken, sha256Hex } from '@/core/shared/token';
 import type { BoardRepository } from '@/core/boards/repository';
+import type { ActivityRepository } from '@/core/activity/repository';
+import type { EventPublisher } from '@/core/realtime/event-bus';
+import { activityAppended } from '@/core/realtime/events';
+import { toActivityDTO } from '@/core/activity/activity';
 import type { ParticipantRepository } from './repository';
 import { type Participant, type GuestParticipant, toGuestParticipant } from './participant';
 import type { JoinBoardInput } from './schema';
@@ -27,6 +31,8 @@ export async function joinBoard(
   shareToken: string,
   input: JoinBoardInput,
   existingCookieToken: string | null,
+  activityRepo?: ActivityRepository,
+  publisher?: EventPublisher,
 ): Promise<Result<JoinBoardResult>> {
   const board = await boardRepo.getByToken(shareToken);
   if (!board) return err('NOT_FOUND', 'Board not found');
@@ -59,6 +65,21 @@ export async function joinBoard(
     color: null,
     sessionTokenHash: sha256Hex(token), // store ONLY the hash — the raw token never touches the DB
   });
+
+  if (activityRepo) {
+    const activity = await activityRepo.append({
+      boardId: board.id,
+      participantId: participant.id,
+      action: 'participant.joined',
+      taskId: null,
+      meta: { displayName: participant.displayName },
+    });
+    if (publisher) {
+      void publisher
+        .publish(board.id, activityAppended(board.id, participant.id, toActivityDTO(activity)))
+        .catch(() => undefined);
+    }
+  }
 
   return ok({ actor: { boardId: board.id, participantId: participant.id }, participant, token });
 }
