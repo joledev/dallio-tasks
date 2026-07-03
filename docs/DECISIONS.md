@@ -6,9 +6,9 @@ a reviewer can see the reasoning without reading the diff.
 
 ---
 
-## On the shipped `AGENTS.md`
+## On the provided brief
 
-The repo ships an `AGENTS.md` ("Engineering Conventions") that presents itself as
+The repo ships a `BRIEF.md` ("Engineering Conventions") that presents itself as
 mandatory and says code review checks against it — and then, in the same breath,
 _"Feel free to change this."_ Read straight, most of its rules are textbook
 anti-patterns: GET for mutations, all-`TEXT` columns, no validation, no foreign keys,
@@ -18,12 +18,12 @@ show judgment, not compliance.
 
 So that's what we did. Below is one ADR per convention we declined, with the reason,
 plus the one we kept. The house rules that actually govern this codebase live in
-`docs/engineering/guidelines.md` and `code-quality.md`; where they and `AGENTS.md`
+`docs/engineering/guidelines.md` and `code-quality.md`; where they and `BRIEF.md`
 disagree, the guidelines win. Tone here is deliberate: this is a critique of a brief,
 not of whoever will read it.
 
 ### ADR-001 — HTTP verbs match semantics; no GET for mutations
-**Context.** `AGENTS.md` wants `GET` for create/update/delete so every operation is
+**Context.** `BRIEF.md` wants `GET` for create/update/delete so every operation is
 triggerable from a browser address bar.
 **Decision.** Reads are `GET`; mutations are `POST`/`PATCH`/`DELETE`. Assignment is
 `POST /api/tasks/:id/assign`.

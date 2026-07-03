@@ -38,7 +38,7 @@ The brief was a task tracker. Every part of that is covered:
 
 ### A note on the template's conventions
 
-The starter template shipped an `AGENTS.md` of "engineering conventions" that were,
+The starter template shipped a brief of "engineering conventions" (kept here as `BRIEF.md`) that were,
 read plainly, a set of anti-patterns — GET for mutations, every column stored as
 `TEXT`, no input validation, no foreign keys, in-memory pagination, credential
 logging — alongside an explicit invitation to *"feel free to change this."* I read
