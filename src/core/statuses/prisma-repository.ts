@@ -5,12 +5,11 @@ import type { Status } from './status';
 import type { StatusColor } from './schema';
 
 // Prisma stores color as a widened String?; writes are constrained to the token set (schema), so the
-// cast is the sanctioned boundary projection (Prisma row → domain Status). boardId is nullable in the
-// DB until L1c but the app always sets it (L1a backfill + a DB trigger), so the domain treats it as
-// non-null here.
+// cast is the sanctioned boundary projection (Prisma row → domain Status). boardId is non-null since
+// L1c-b.
 const toStatus = (row: PrismaStatus): Status => ({
   id: row.id,
-  boardId: row.boardId!,
+  boardId: row.boardId,
   name: row.name,
   slug: row.slug,
   position: row.position,

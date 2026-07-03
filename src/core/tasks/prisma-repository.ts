@@ -17,16 +17,14 @@ const toTask = (row: TaskRow): Task => ({
   description: row.description,
   statusId: row.statusId,
   // Reuse the canonical projection; widen the Prisma String? column to the palette token (writes are
-  // constrained) and assert the nullable boardId (app always sets it — see the boardId note below).
+  // constrained). boardId is non-null since L1c-b, so no assertion is needed.
   status: toStatusRef({
     ...row.status,
     color: row.status.color as StatusColor | null,
-    boardId: row.status.boardId!,
+    boardId: row.status.boardId,
   }),
   priority: row.priority,
-  // boardId is nullable in the DB until L1c but the app always sets it (L1a backfill + a DB trigger
-  // fills any interim write), so the domain treats it as non-null here.
-  boardId: row.boardId!,
+  boardId: row.boardId,
   assigneeParticipantId: row.assigneeParticipantId, // H1: → Participant (legacy assigneeId now dead)
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
