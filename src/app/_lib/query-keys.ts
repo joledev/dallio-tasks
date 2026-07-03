@@ -14,3 +14,7 @@ export const taskKeys = {
 export const userKeys = {
   all: ['users'] as const,
 };
+
+export const statusKeys = {
+  all: ['statuses'] as const,
+};

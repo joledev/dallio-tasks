@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
-import { StatusEnum, PriorityEnum, TASK_SORT_FIELDS } from '@/core/tasks/schema';
+import { PriorityEnum, TASK_SORT_FIELDS } from '@/core/tasks/schema';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/core/shared/pagination';
 import type { TaskListFilters } from '@/app/_lib/query-keys';
 
@@ -13,7 +13,7 @@ export type TaskView = 'table' | 'board';
 // instead of nuking the whole filter set. Defaults mirror the server's `listTasksQuerySchema` — the
 // URL is the single source of truth for filter state.
 const filtersParseSchema = z.object({
-  status: StatusEnum.optional().catch(undefined),
+  statusId: z.uuid().optional().catch(undefined),
   priority: PriorityEnum.optional().catch(undefined),
   assigneeId: z.uuid().optional().catch(undefined),
   q: z.string().trim().min(1).max(200).optional().catch(undefined),
@@ -35,11 +35,11 @@ function parseView(raw: string | null): TaskView {
 }
 
 // Only non-default / non-empty params land in the URL — keeps shared links tidy. Raw filters
-// (including `status`) are always preserved regardless of view, so toggling back to Table restores
+// (including `statusId`) are always preserved regardless of view, so toggling back to Table restores
 // them.
 function serialize(filters: TaskListFilters, view: TaskView): string {
   const params = new URLSearchParams();
-  if (filters.status) params.set('status', filters.status);
+  if (filters.statusId) params.set('statusId', filters.statusId);
   if (filters.priority) params.set('priority', filters.priority);
   if (filters.assigneeId) params.set('assigneeId', filters.assigneeId);
   if (filters.q) params.set('q', filters.q);
@@ -51,14 +51,14 @@ function serialize(filters: TaskListFilters, view: TaskView): string {
   return params.toString();
 }
 
-// Board's three columns *are* the status axis, so its effective query drops `status`, forces page 1
-// and fetches up to MAX_PAGE_SIZE, then the view groups client-side. Table uses filters as-is.
+// The board's columns *are* the status axis, so its effective query drops `statusId`, forces page 1
+// and fetches up to MAX_PAGE_SIZE, then the view groups client-side over the dynamic status list.
 // Known limit: a board with more than MAX_PAGE_SIZE matching tasks shows only the first page;
 // server-side per-column pagination is the follow-up.
 function toEffective(filters: TaskListFilters, view: TaskView): TaskListFilters {
   if (view !== 'board') return filters;
   const next = { ...filters, page: 1, size: MAX_PAGE_SIZE };
-  delete next.status;
+  delete next.statusId;
   return next;
 }
 
@@ -87,7 +87,7 @@ export function useTaskFilters(): UseTaskFilters {
   const effectiveFilters = useMemo(() => toEffective(filters, view), [filters, view]);
 
   const hasActiveFilters = Boolean(
-    filters.status || filters.priority || filters.assigneeId || filters.q,
+    filters.statusId || filters.priority || filters.assigneeId || filters.q,
   );
 
   const push = useCallback(
