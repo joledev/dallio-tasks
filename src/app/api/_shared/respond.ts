@@ -9,6 +9,7 @@ const STATUS: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   LIMIT_EXCEEDED: 409, // a full board is a conflicting state, not a bad request
+  RATE_LIMITED: 429, // too many requests in the window (RateLimiter port, wired from L3 onward)
   INTERNAL: 500,
 };
 

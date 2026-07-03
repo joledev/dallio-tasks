@@ -17,5 +17,19 @@ services:
       timeout: 5s
       retries: 10
 
+  # Real-time broker for the collab layer (pub/sub + capped replay list + presence). No volume:
+  # state is intentionally ephemeral (L2b seq design tolerates a reset), matching the k8s emptyDir.
+  redis:
+    image: redis:7-alpine
+    container_name: dallio-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   dallio_pgdata:
