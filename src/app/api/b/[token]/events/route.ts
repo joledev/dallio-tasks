@@ -16,19 +16,34 @@ type Ctx = { params: Promise<{ token: string }> };
 
 export async function GET(req: Request, { params }: Ctx) {
   const { token } = await params;
-  const actor = await resolveActor(boardRepository, participantRepository, token, await cookies());
+  const present = new URL(req.url).searchParams.get('present') === '1';
+  const board = present ? await boardRepository.getByToken(token) : null;
+  const actor = present
+    ? board
+      ? ({ ok: true, data: { boardId: board.id, participantId: null } } as const)
+      : err('NOT_FOUND', 'Board not found')
+    : await resolveActor(boardRepository, participantRepository, token, await cookies());
   if (!actor.ok) return respond(actor);
-  const participant = actor.data.participantId
-    ? await participantRepository.getById(actor.data.participantId, actor.data.boardId)
-    : null;
-  if (!participant) return respond(err('UNAUTHORIZED', 'Not joined'));
+  const publicParticipant = present
+    ? {
+        id: `projector:${token}`,
+        boardId: actor.data.boardId,
+        displayName: 'Projector',
+        color: 'zinc',
+      }
+    : actor.data.participantId
+      ? await participantRepository
+          .getById(actor.data.participantId, actor.data.boardId)
+          .then((participant) => (participant ? toPublicParticipant(participant) : null))
+      : null;
+  if (!publicParticipant) return respond(err('UNAUTHORIZED', 'Not joined'));
 
   const stream = createBoardEventStream(
     eventBus,
     actor.data.boardId,
     req.headers.get('last-event-id'),
     undefined,
-    { presence: presenceStore, participant: toPublicParticipant(participant) },
+    { presence: presenceStore, participant: publicParticipant },
   );
   return new NextResponse(stream, {
     headers: {

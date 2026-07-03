@@ -4,6 +4,7 @@ import { generateShareToken } from '@/core/shared/token';
 import { DEFAULT_STATUS_SEED } from '@/core/statuses/seed';
 import type { BoardRepository } from './repository';
 import type { Board } from './board';
+import type { BoardCache } from './cache';
 
 // The Prisma Board row maps 1:1 to the domain Board (all fields present + typed), so the projection is
 // a straight pass-through at this boundary.
@@ -16,7 +17,27 @@ const toBoard = (row: PrismaBoard): Board => ({
   updatedAt: row.updatedAt,
 });
 
+const TOKEN_CACHE_TTL_SEC = 300;
+
 export class PrismaBoardRepository implements BoardRepository {
+  constructor(private readonly cache?: BoardCache) {}
+
+  private async cachedByToken(token: string): Promise<Board | null> {
+    try {
+      return (await this.cache?.getByToken(token)) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async cacheByToken(board: Board): Promise<void> {
+    try {
+      await this.cache?.setByToken(board, TOKEN_CACHE_TTL_SEC);
+    } catch {
+      // Redis is an acceleration layer for token lookups; the database remains authoritative.
+    }
+  }
+
   async getByOwnerId(ownerId: string) {
     // Deterministic pick: an owner is 1:1 with a board today, but multi-board-per-owner is coming —
     // oldest-first keeps the interim "acting board" stable rather than silently varying by row order.
@@ -25,13 +46,22 @@ export class PrismaBoardRepository implements BoardRepository {
   }
 
   async getByToken(token: string) {
+    const cached = await this.cachedByToken(token);
+    if (cached) return cached;
     const row = await prisma.board.findUnique({ where: { shareToken: token } });
-    return row ? toBoard(row) : null;
+    if (!row) return null;
+    const board = toBoard(row);
+    await this.cacheByToken(board);
+    return board;
   }
 
   async listByOwner(ownerId: string) {
-    const rows = await prisma.board.findMany({ where: { ownerId }, orderBy: { createdAt: 'asc' } });
-    return rows.map(toBoard);
+    const rows = await prisma.board.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: 'asc' },
+      include: { _count: { select: { tasks: true } } },
+    });
+    return rows.map((row) => ({ ...toBoard(row), taskCount: row._count.tasks }));
   }
 
   async createForOwner(ownerId: string, name: string) {
@@ -46,6 +76,8 @@ export class PrismaBoardRepository implements BoardRepository {
       });
       return board;
     });
-    return toBoard(row);
+    const board = toBoard(row);
+    await this.cacheByToken(board);
+    return board;
   }
 }

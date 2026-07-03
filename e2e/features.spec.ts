@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { SEED_TASKS, SEED_STATUSES } from '../prisma/seed-data';
+import { SEED_TASKS, SEED_STATUSES, SEED_BOARD_TOKEN } from '../prisma/seed-data';
 import { resetToSeed } from './reset';
 
 // Statuses are data-driven now: tasks carry a `statusSlug` in the seed and board columns are keyed by
@@ -11,6 +11,17 @@ const seedCount = (slug: StatusSlug) => SEED_TASKS.filter((t) => t.statusSlug ==
 const statusName = (slug: StatusSlug) => SEED_STATUSES.find((s) => s.slug === slug)!.name;
 
 test.beforeAll(resetToSeed);
+
+async function openDemoBoard(page: Page) {
+  await page.goto(`/b/${SEED_BOARD_TOKEN}`);
+  const dialog = page.getByRole('dialog');
+  if (await dialog.isVisible().catch(() => false)) {
+    await dialog.getByLabel('Display name').fill('E2E Features');
+    await dialog.getByRole('button', { name: 'Join board' }).click();
+    await expect(dialog).toBeHidden();
+  }
+  await expect(page.getByRole('heading', { name: 'My Board' })).toBeVisible();
+}
 
 function boardColumn(page: Page, slug: StatusSlug): Locator {
   // Resolve columns by their accessible region name (the status name), NOT by a hardcoded status id:
@@ -46,8 +57,7 @@ async function dragCardToColumn(page: Page, grip: Locator, targetColumn: Locator
 const SLUGS: StatusSlug[] = ['todo', 'in_progress', 'done'];
 
 test('both views render seeded data with correct counts', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Dallio Tasks' })).toBeVisible();
+  await openDemoBoard(page);
 
   for (const slug of SLUGS) {
     await expect(page.getByRole('row').filter({ hasText: seedTitle(slug) })).toBeVisible();
@@ -73,7 +83,7 @@ test('drag-and-drop moves a card across columns and the change persists', async 
   const title = `E2E dnd task ${Date.now()}`;
 
   // A fresh task (defaults to TODO) keeps the drag self-contained and doesn't disturb the seed.
-  await page.goto('/');
+  await openDemoBoard(page);
   await page.getByRole('button', { name: 'New task' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByPlaceholder('Task title').fill(title);
@@ -94,7 +104,7 @@ test('drag-and-drop moves a card across columns and the change persists', async 
   const grip = page.getByRole('button', { name: `Drag ${title} to another column` });
   const patch = page.waitForResponse(
     (r) =>
-      /\/api\/tasks\/[0-9a-f-]{36}$/.test(new URL(r.url()).pathname) &&
+      /\/api\/b\/[^/]+\/tasks\/[0-9a-f-]{36}$/.test(new URL(r.url()).pathname) &&
       r.request().method() === 'PATCH',
   );
   await dragCardToColumn(page, grip, inProgress);

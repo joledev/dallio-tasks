@@ -11,14 +11,15 @@ import type { ActivityDTO } from '@/app/_lib/types';
 const TASK_EVENTS = ['task.created', 'task.updated', 'task.moved', 'task.deleted'] as const;
 const ACTIVITY_LIMIT = 30;
 
-export function useBoardStream(token: string, enabled: boolean) {
+export function useBoardStream(token: string, enabled: boolean, present = false) {
   const queryClient = useQueryClient();
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
 
-    const source = new EventSource(`/api/b/${encodeURIComponent(token)}/events`);
+    const qs = present ? '?present=1' : '';
+    const source = new EventSource(`/api/b/${encodeURIComponent(token)}/events${qs}`);
 
     const refresh = () => {
       source.close();
@@ -72,5 +73,5 @@ export function useBoardStream(token: string, enabled: boolean) {
       source.removeEventListener('activity.appended', onActivityEvent);
       source.close();
     };
-  }, [enabled, nonce, queryClient, token]);
+  }, [enabled, nonce, present, queryClient, token]);
 }
