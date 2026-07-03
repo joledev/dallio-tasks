@@ -72,7 +72,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
         priority: i < 2 ? 'HIGH' : 'MEDIUM',
         boardId: BOARD_A,
         createdByParticipantId: null,
-        assigneeId: null,
+        assigneeParticipantId: null,
       });
     }
     // Board B: one task that A must never see/touch.
@@ -83,7 +83,7 @@ describe.skipIf(!dbUp)('PrismaTaskRepository (integration — real Postgres)', (
       priority: 'LOW',
       boardId: BOARD_B,
       createdByParticipantId: null,
-      assigneeId: null,
+      assigneeParticipantId: null,
     });
   });
 

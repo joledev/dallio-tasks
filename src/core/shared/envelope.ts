@@ -1,4 +1,11 @@
-export type ErrorCode = 'VALIDATION_ERROR' | 'NOT_FOUND' | 'UNAUTHORIZED' | 'CONFLICT' | 'INTERNAL';
+export type ErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'NOT_FOUND'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'CONFLICT'
+  | 'LIMIT_EXCEEDED'
+  | 'INTERNAL';
 
 export type Ok<T> = { ok: true; data: T };
 export type Err = { ok: false; error: { code: ErrorCode; message: string; details?: unknown } };

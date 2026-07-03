@@ -24,7 +24,7 @@ export function TaskCard({ task }: { task: TaskDTO }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const { nameFor } = useUsers();
-  const assigneeName = nameFor(task.assigneeId);
+  const assigneeName = nameFor(task.assigneeParticipantId);
 
   // Drag source. The DnD status change is an *enhancement* layered over the inline StatusSelect below
   // (the accessible keyboard/touch fallback that always stays present). `data.statusId` lets the board's
@@ -91,7 +91,11 @@ export function TaskCard({ task }: { task: TaskDTO }) {
       <div className="mt-4 grid gap-2">
         <StatusSelect taskId={task.id} statusId={task.statusId} className="w-full" />
         <PrioritySelect taskId={task.id} priority={task.priority} className="w-full" />
-        <AssignControl taskId={task.id} assigneeId={task.assigneeId} className="w-full" />
+        <AssignControl
+          taskId={task.id}
+          assigneeParticipantId={task.assigneeParticipantId}
+          className="w-full"
+        />
       </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
@@ -114,7 +118,7 @@ export function TaskCard({ task }: { task: TaskDTO }) {
 // so there are no duplicate registered draggables or focusable controls floating with the cursor.
 export function TaskCardOverlay({ task }: { task: TaskDTO }) {
   const { nameFor } = useUsers();
-  const assigneeName = nameFor(task.assigneeId);
+  const assigneeName = nameFor(task.assigneeParticipantId);
 
   return (
     <article className="bg-card text-card-foreground w-72 max-w-full rotate-1 cursor-grabbing rounded-lg border p-4 shadow-lg">

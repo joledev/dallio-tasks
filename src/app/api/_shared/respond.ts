@@ -5,8 +5,10 @@ import { err, type Result, type ErrorCode } from '@/core/shared/envelope';
 const STATUS: Record<ErrorCode, number> = {
   VALIDATION_ERROR: 400,
   UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  LIMIT_EXCEEDED: 409, // a full board is a conflicting state, not a bad request
   INTERNAL: 500,
 };
 

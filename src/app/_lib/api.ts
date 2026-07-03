@@ -60,7 +60,7 @@ function toQueryString(filters: TaskListFilters): string {
   };
   put('statusId', filters.statusId);
   put('priority', filters.priority);
-  put('assigneeId', filters.assigneeId);
+  put('assigneeParticipantId', filters.assigneeParticipantId);
   put('q', filters.q);
   put('sort', filters.sort);
   put('dir', filters.dir);

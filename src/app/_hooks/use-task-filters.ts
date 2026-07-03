@@ -15,7 +15,7 @@ export type TaskView = 'table' | 'board';
 const filtersParseSchema = z.object({
   statusId: z.uuid().optional().catch(undefined),
   priority: PriorityEnum.optional().catch(undefined),
-  assigneeId: z.uuid().optional().catch(undefined),
+  assigneeParticipantId: z.uuid().optional().catch(undefined),
   q: z.string().trim().min(1).max(200).optional().catch(undefined),
   sort: z.enum(TASK_SORT_FIELDS).catch('createdAt'),
   dir: z.enum(['asc', 'desc']).catch('desc'),
@@ -41,7 +41,8 @@ function serialize(filters: TaskListFilters, view: TaskView): string {
   const params = new URLSearchParams();
   if (filters.statusId) params.set('statusId', filters.statusId);
   if (filters.priority) params.set('priority', filters.priority);
-  if (filters.assigneeId) params.set('assigneeId', filters.assigneeId);
+  if (filters.assigneeParticipantId)
+    params.set('assigneeParticipantId', filters.assigneeParticipantId);
   if (filters.q) params.set('q', filters.q);
   if (filters.sort !== DEFAULTS.sort) params.set('sort', filters.sort);
   if (filters.dir !== DEFAULTS.dir) params.set('dir', filters.dir);
@@ -87,7 +88,7 @@ export function useTaskFilters(): UseTaskFilters {
   const effectiveFilters = useMemo(() => toEffective(filters, view), [filters, view]);
 
   const hasActiveFilters = Boolean(
-    filters.statusId || filters.priority || filters.assigneeId || filters.q,
+    filters.statusId || filters.priority || filters.assigneeParticipantId || filters.q,
   );
 
   const push = useCallback(

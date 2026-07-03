@@ -153,7 +153,7 @@ describe.skipIf(!dbUp)('PrismaStatusRepository (integration — real Postgres)',
       priority: 'MEDIUM',
       boardId: BOARD_A,
       createdByParticipantId: null,
-      assigneeId: null,
+      assigneeParticipantId: null,
     });
 
     // Use-case guard: countTasks > 0 → CONFLICT.

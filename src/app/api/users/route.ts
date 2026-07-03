@@ -1,13 +1,13 @@
 import { handle } from '@/app/api/_shared/respond';
 import { parse } from '@/app/api/_shared/parse';
-import { resolveActingUserId } from '@/app/api/_shared/session';
+import { resolveOwnerId } from '@/app/api/_shared/session';
 import { createUserSchema, listUsersQuerySchema } from '@/core/users/schema';
 import { createUser, listUsers } from '@/core/users/use-cases';
 import { userRepository } from '@/core/users/container';
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const auth = resolveActingUserId();
+    const auth = resolveOwnerId();
     if (!auth.ok) return auth;
     const parsed = parse(createUserSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   return handle(async () => {
-    const auth = resolveActingUserId();
+    const auth = resolveOwnerId();
     if (!auth.ok) return auth;
     const parsed = parse(
       listUsersQuerySchema,
