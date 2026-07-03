@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { InMemoryStatusRepository } from '@/test/in-memory/status-repository';
+import { InMemoryEventBus } from '@/test/in-memory/event-bus';
 import type { Actor } from '@/core/shared/actor';
 import { createStatus, listStatuses, deleteStatus } from './use-cases';
 import { createStatusSchema } from './schema';
@@ -168,6 +170,97 @@ describe('deleteStatus', () => {
     const res = await deleteStatus(repo, actorB, doingId);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('status use-cases — realtime event emission', () => {
+  let repo: InMemoryStatusRepository;
+  let bus: InMemoryEventBus;
+  const actor: Actor = { boardId: BOARD_A, participantId: randomUUID() };
+
+  beforeEach(() => {
+    repo = new InMemoryStatusRepository();
+    bus = new InMemoryEventBus();
+  });
+
+  it('emits status.created with the created StatusRef', async () => {
+    const res = await createStatus(repo, actor, createStatusSchema.parse({ name: 'On Hold' }), bus);
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    expect(bus.published).toHaveLength(1);
+    expect(bus.published[0]).toMatchObject({
+      type: 'status.created',
+      boardId: BOARD_A,
+      actorId: actor.participantId,
+    });
+    if (res.ok)
+      expect(bus.published[0].data).toMatchObject({
+        id: res.data.id,
+        name: 'On Hold',
+        slug: 'on_hold',
+      });
+  });
+
+  it('emits status.deleted with only the status id', async () => {
+    await repo.create({
+      boardId: BOARD_A,
+      name: 'To do',
+      slug: 'todo',
+      position: 0,
+      color: null,
+      isDefault: true,
+    });
+    const doing = await repo.create({
+      boardId: BOARD_A,
+      name: 'Doing',
+      slug: 'doing',
+      position: 1,
+      color: 'blue',
+      isDefault: false,
+    });
+
+    const res = await deleteStatus(repo, actor, doing.id, bus);
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    expect(bus.published).toHaveLength(1);
+    expect(bus.published[0]).toMatchObject({
+      type: 'status.deleted',
+      boardId: BOARD_A,
+      actorId: actor.participantId,
+      data: { id: doing.id },
+    });
+  });
+
+  it('does not emit when the create/delete is rejected', async () => {
+    await createStatus(repo, actor, createStatusSchema.parse({ name: 'Staging' }), bus);
+    // Duplicate slug → CONFLICT, no second event.
+    const dup = await createStatus(repo, actor, createStatusSchema.parse({ name: 'staging' }), bus);
+    expect(dup.ok).toBe(false);
+    expect(bus.published).toHaveLength(1);
+    expect(bus.published.map((event) => event.type)).toEqual(['status.created']);
+  });
+
+  it('does not fail the mutation when publish fails', async () => {
+    const failingBus = {
+      publish: async () => {
+        throw new Error('publish failed');
+      },
+    };
+
+    const res = await createStatus(
+      repo,
+      actor,
+      createStatusSchema.parse({ name: 'Resilient' }),
+      failingBus,
+    );
+    await Promise.resolve();
+
+    expect(res.ok).toBe(true);
+    const after = await listStatuses(repo, actor);
+    if (!after.ok) throw new Error('ok');
+    expect(after.data.map((s) => s.slug)).toContain('resilient');
   });
 });
 

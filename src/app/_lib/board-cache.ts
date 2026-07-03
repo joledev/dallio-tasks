@@ -99,9 +99,15 @@ export function applyProposalEventToCache(
   token: string,
   event: ProposalCacheEvent,
 ) {
+  // Upsert by id for EVERY arm — never blind-append. The creator inserts the proposal in the mutation's
+  // onSuccess and then also receives their OWN `proposal.created` self-echo over SSE; a prepend without
+  // this dedupe rendered the proposal twice. Replace-by-id keeps the self-echo (and any re-delivery on
+  // reconnect) idempotent, so each proposal appears exactly once.
   queryClient.setQueryData<ProposalDTO[]>(boardProposalKeys(token).all, (old = []) => {
-    if (event.type === 'proposal.created') return [event.data, ...old];
-    const next = old.map((proposal) => (proposal.id === event.data.id ? event.data : proposal));
-    return next.some((proposal) => proposal.id === event.data.id) ? next : [event.data, ...old];
+    if (old.some((proposal) => proposal.id === event.data.id)) {
+      return old.map((proposal) => (proposal.id === event.data.id ? event.data : proposal));
+    }
+    // Unseen id: `proposal.created` prepends (newest-first); a first-seen update/applied also lands here.
+    return [event.data, ...old];
   });
 }

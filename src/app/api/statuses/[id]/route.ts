@@ -4,6 +4,7 @@ import { resolveActingBoard } from '@/app/api/_shared/session';
 import { deleteStatus } from '@/core/statuses/use-cases';
 import { statusRepository } from '@/core/statuses/container';
 import { boardRepository } from '@/core/boards/container';
+import { eventBus } from '@/core/realtime/container';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -13,6 +14,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     if (!auth.ok) return auth;
     const id = parseId((await params).id);
     if (!id.ok) return id;
-    return deleteStatus(statusRepository, auth.data, id.data);
+    return deleteStatus(statusRepository, auth.data, id.data, eventBus);
   });
 }

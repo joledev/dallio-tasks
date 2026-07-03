@@ -1,5 +1,6 @@
 import type { Task } from '@/core/tasks/task';
 import type { PublicParticipant } from '@/core/participants/participant';
+import type { StatusRef } from '@/core/statuses/status';
 import type { ActivityDTO } from '@/core/activity/activity';
 
 // FROZEN CONTRACT (freeze-first, gates L2): the BoardEvent discriminated union + factories.
@@ -11,6 +12,8 @@ export type BoardEventType =
   | 'task.updated'
   | 'task.moved'
   | 'task.deleted'
+  | 'status.created'
+  | 'status.deleted'
   | 'participant.joined'
   | 'participant.left'
   | 'activity.appended'
@@ -62,6 +65,8 @@ export type BoardEvent =
   | (BoardEventEnvelope & { type: 'task.updated'; data: Task })
   | (BoardEventEnvelope & { type: 'task.moved'; data: Task })
   | (BoardEventEnvelope & { type: 'task.deleted'; data: { id: string } })
+  | (BoardEventEnvelope & { type: 'status.created'; data: StatusRef })
+  | (BoardEventEnvelope & { type: 'status.deleted'; data: { id: string } })
   | (BoardEventEnvelope & { type: 'participant.joined'; data: ParticipantPresence })
   | (BoardEventEnvelope & { type: 'participant.left'; data: ParticipantPresence })
   | (BoardEventEnvelope & { type: 'activity.appended'; data: ActivityDTO })
@@ -103,6 +108,26 @@ export const taskDeleted = (
   actorId: string | null,
   taskId: string,
 ): NewBoardEvent => ({ type: 'task.deleted', boardId, actorId, ts: now(), data: { id: taskId } });
+
+// status.created carries the StatusRef (name/slug/color/position) for a zero-refetch column render;
+// status.deleted carries only the id to remove, mirroring task.deleted.
+export const statusCreated = (
+  boardId: string,
+  actorId: string | null,
+  status: StatusRef,
+): NewBoardEvent => ({ type: 'status.created', boardId, actorId, ts: now(), data: status });
+
+export const statusDeleted = (
+  boardId: string,
+  actorId: string | null,
+  statusId: string,
+): NewBoardEvent => ({
+  type: 'status.deleted',
+  boardId,
+  actorId,
+  ts: now(),
+  data: { id: statusId },
+});
 
 export const participantJoined = (
   boardId: string,
