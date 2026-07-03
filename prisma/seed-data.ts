@@ -52,9 +52,9 @@ export const SEED_STATUSES = [
 ] as const;
 
 // The seeded tasks — one per status so the views and board columns have a known shape. `assignee`
-// is resolved to a real id at seed time; `statusSlug` is resolved to the owner's status id.
-// `assignee` maps to BOTH the legacy assigneeId(→User, still read by the L1a app) and the new
-// assigneeParticipantId(→Participant, populated for the demo board).
+// is resolved to a real id at seed time; `statusSlug` is resolved to the board's status id.
+// `assignee` maps to assigneeParticipantId(→Participant, populated for the demo board). The legacy
+// assigneeId(→User) path was removed in L1c-a.
 export const SEED_TASKS = [
   {
     id: '00000000-0000-4000-8000-000000000101',
@@ -90,13 +90,11 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
     create: { id: OWNER_ID, email: 'owner@dallio.local', name: 'Owner' },
   });
 
-  const [ada] = await Promise.all(
+  await Promise.all(
     DEMO_USERS.map((u) =>
       prisma.user.upsert({ where: { email: u.email }, update: { name: u.name }, create: u }),
     ),
   );
-
-  const assigneeId = { owner: OWNER_ID, ada: ada.id } as const;
 
   // Fase 2 (L1a): the seed owner's demo board. Upsert by fixed id so an already-migrated DB (whose
   // expand migration created this exact board) is reused rather than duplicated.
@@ -144,7 +142,6 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
       ...task,
       boardId: SEED_BOARD_ID,
       statusId: statusIdBySlug.get(statusSlug)!,
-      assigneeId: assignee ? assigneeId[assignee] : null,
       // Fase 2 attribution: creator = the owner participant; assignee mirrored onto the participant FK.
       createdByParticipantId: ownerParticipant.id,
       assigneeParticipantId: assignee ? assigneeParticipantId[assignee] : null,
