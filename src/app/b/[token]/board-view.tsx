@@ -32,7 +32,7 @@ export function BoardView({ boardName }: { boardName: string }) {
           </Button>
           <h1 className="truncate text-2xl font-semibold tracking-tight">{boardName}</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <BoardModeToggle />
           <ViewToggle />
           <BoardRequestMenu />

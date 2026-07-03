@@ -110,8 +110,9 @@ export function FilterBar() {
       {board ? <BoardAssigneeFilter /> : null}
 
       {/* Sort + direction share one cell so the icon toggle stays next to its select (the card list
-          has no column headers — this is the sole sort affordance on mobile). */}
-      <div className="flex items-center gap-2">
+          has no column headers — this is the sole sort affordance on mobile). Span both mobile columns
+          so the select is wide enough to show the full label (e.g. "Created", not a clipped "Create"). */}
+      <div className="col-span-2 flex items-center gap-2 md:col-span-1">
         <Select value={filters.sort} onValueChange={(v) => set({ sort: v as typeof filters.sort })}>
           <SelectTrigger className="h-11! w-full min-w-0 md:h-9! md:w-[140px]" aria-label="Sort by">
             <SelectValue />
