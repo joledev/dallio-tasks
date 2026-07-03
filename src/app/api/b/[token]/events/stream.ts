@@ -20,6 +20,13 @@ export function frameRefreshEvent(): string {
   return 'event: refresh\ndata: {}\n\n';
 }
 
+// A one-shot marker at the replay→live boundary: everything BEFORE it is replayed backlog (the client
+// patches its cache silently), everything AFTER is live. The client gates "who did what" toasts on it
+// so opening a board doesn't pop a toast for every historical event.
+export function frameLiveEvent(): string {
+  return 'event: live\ndata: {}\n\n';
+}
+
 function parseCursor(value: string | null): number {
   if (!value) return 0;
   const parsed = Number(value);
@@ -134,6 +141,7 @@ export function createBoardEventStream(
         return;
       }
       for (const event of replayed.events) enqueueEvent(event);
+      enqueue(frameLiveEvent()); // replay done → everything after this is live (client un-gates toasts)
 
       if (lifecycle) {
         const first = await lifecycle.presence.join(boardId, lifecycle.participant.id);

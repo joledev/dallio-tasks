@@ -63,6 +63,25 @@ async function openAndRead(stream: ReadableStream<Uint8Array>): Promise<{
   return { reader, text: value ? decoder.decode(value) : '' };
 }
 
+// Read chunks (up to a bound) until the accumulated text contains `substr`. The replay→live `live`
+// marker frame now precedes live events, so a live event (e.g. participant.joined) is no longer in the
+// very first chunk.
+async function openUntil(
+  stream: ReadableStream<Uint8Array>,
+  substr: string,
+): Promise<{ reader: ReadableStreamDefaultReader<Uint8Array>; text: string }> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  for (let i = 0; i < 12; i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value);
+    if (text.includes(substr)) break;
+  }
+  return { reader, text };
+}
+
 describe('SSE stream framing/replay helpers', () => {
   it('frames BoardEvent with id, event, and JSON data lines', async () => {
     const bus = new InMemoryEventBus();
@@ -166,8 +185,9 @@ describe('SSE presence lifecycle', () => {
     const bus = new InMemoryEventBus();
     const presence = new InMemoryPresenceStore();
 
-    const first = await openAndRead(
+    const first = await openUntil(
       createBoardEventStream(bus, BOARD, '0', 60_000, { presence, participant }),
+      'event: participant.joined',
     );
     expect(first.text).toContain('event: participant.joined');
     expect(bus.published.filter((event) => event.type === 'participant.joined')).toHaveLength(1);
