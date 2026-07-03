@@ -1,20 +1,28 @@
 import { ok, err, type Result } from '@/core/shared/envelope';
 import { pageOffset, type Paginated } from '@/core/shared/pagination';
 import type { UserRepository } from '@/core/users/repository';
+import type { StatusRepository } from '@/core/statuses/repository';
 import type { TaskRepository } from './repository';
 import type { Task } from './task';
-import { DEFAULT_STATUS } from './task';
 import type { CreateTaskInput, UpdateTaskInput, AssignTaskInput, ListTasksQuery } from './schema';
 
+// Rich use-case: resolves the status server-side. A supplied statusId is scope-checked (IDOR — a
+// foreign/unknown id is invisible → rejected); an absent one falls back to the owner's default.
 export async function createTask(
   repo: TaskRepository,
+  statusRepo: StatusRepository,
   actingUserId: string,
   input: CreateTaskInput,
 ): Promise<Result<Task>> {
+  const statusId = input.statusId
+    ? (await statusRepo.getById(input.statusId, actingUserId))?.id
+    : (await statusRepo.getDefault(actingUserId))?.id;
+  if (!statusId) return err('VALIDATION_ERROR', 'Unknown status');
+
   const task = await repo.create({
     title: input.title,
     description: input.description ?? null,
-    status: DEFAULT_STATUS, // server-set, never from the client
+    statusId,
     priority: input.priority,
     ownerId: actingUserId, // derived identity, never from the body
     assigneeId: null, // created unassigned
@@ -39,7 +47,7 @@ export async function listTasks(
   const { items, total } = await repo.list({
     filter: {
       ownerId: actingUserId,
-      status: query.status,
+      statusId: query.statusId,
       priority: query.priority,
       assigneeId: query.assigneeId,
       q: query.q,
@@ -54,10 +62,14 @@ export async function listTasks(
 
 export async function updateTask(
   repo: TaskRepository,
+  statusRepo: StatusRepository,
   actingUserId: string,
   id: string,
   input: UpdateTaskInput,
 ): Promise<Result<Task>> {
+  // Scope-check a status change first: a cross-owner status is invisible → rejected before the write.
+  if (input.statusId && !(await statusRepo.getById(input.statusId, actingUserId)))
+    return err('VALIDATION_ERROR', 'Unknown status');
   const task = await repo.update(id, actingUserId, input);
   return task ? ok(task) : err('NOT_FOUND', 'Task not found');
 }
