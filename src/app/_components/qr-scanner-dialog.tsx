@@ -155,7 +155,9 @@ export function QrScannerDialog() {
           Enter invite
         </Button>
       ) : null}
-      <DialogContent className="sm:max-w-xl">
+      {/* Cap the dialog to the viewport and let it scroll: on a short phone the camera preview + form
+          must never overflow off-screen or push the manual-input fallback out of reach. */}
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Scan QR</DialogTitle>
           <DialogDescription>Scan a Dallio board invite or paste its URL.</DialogDescription>
@@ -163,7 +165,8 @@ export function QrScannerDialog() {
 
         <div className="space-y-4">
           {canScan ? (
-            <div className="bg-muted relative aspect-[4/3] overflow-hidden rounded-md border">
+            // Cap the preview height so a tall/narrow phone doesn't give the camera the whole screen.
+            <div className="bg-muted relative aspect-[4/3] max-h-[45vh] w-full overflow-hidden rounded-md border">
               <video
                 ref={videoRef}
                 muted
