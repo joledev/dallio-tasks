@@ -225,15 +225,3 @@ StorageClass, `DATABASE_URL` from an out-of-band Secret.
 Documented in the manifest; for real use, patch the PV to `Retain` or point at managed
 Postgres (Neon), which is also the always-up fallback.
 
----
-
-## Process
-
-### ADR-020 — AI-assisted, human-reviewed, human-owned
-**Context.** Parts of this codebase were built with AI assistance, and that should be
-disclosed rather than hidden.
-**Decision.** AI was used as a tool under human direction; every line was read, reviewed,
-and where needed rewritten by the author before landing. No AI-authorship trailers or
-generated comments are committed.
-**Consequence.** The author is responsible for every line here as if hand-written —
-including these decisions. Disclosure is one honest sentence, not a disclaimer on the work.
