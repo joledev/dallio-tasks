@@ -31,3 +31,17 @@ export async function handle<T>(fn: () => Promise<Result<T>>, okStatus = 200) {
     return respond(err('INTERNAL', 'Internal error'), 500);
   }
 }
+
+// UI-H3 — mark a response uncacheable. A guest board lives at a stable, cookie-authorized URL, so a
+// browser/proxy/CDN could otherwise serve one visitor's board data to a pre-join request. Applied to
+// EVERY `/api/b/[token]/*` response (success and error alike).
+export function noStore<R extends { headers: Headers }>(res: R): R {
+  res.headers.set('Cache-Control', 'no-store');
+  return res;
+}
+
+// The guest response path: wrap a handler exactly like `handle()`, then stamp `Cache-Control: no-store`
+// on whatever it returns (INTERNAL 500 included). Every guest route uses this instead of `handle()`.
+export async function handleGuest<T>(fn: () => Promise<Result<T>>, okStatus = 200) {
+  return noStore(await handle(fn, okStatus));
+}

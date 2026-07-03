@@ -3,7 +3,7 @@ import type { Actor } from '@/core/shared/actor';
 import { generateSessionToken, sha256Hex } from '@/core/shared/token';
 import type { BoardRepository } from '@/core/boards/repository';
 import type { ParticipantRepository } from './repository';
-import type { Participant } from './participant';
+import { type Participant, type GuestParticipant, toGuestParticipant } from './participant';
 import type { JoinBoardInput } from './schema';
 
 // H2: a launch-time floor on the public join (a real per-IP limiter lands in L3). Bounds row growth
@@ -61,4 +61,17 @@ export async function joinBoard(
   });
 
   return ok({ actor: { boardId: board.id, participantId: participant.id }, participant, token });
+}
+
+// listParticipants — the read behind the participant picker + assignee filter. The caller (the route)
+// has already run `resolveActor`, so authorization/board-scope is settled by the time we get here; we
+// only list THIS board's participants (actor.boardId is the tenant anchor) and project each through
+// `toGuestParticipant` so boardId + sessionTokenHash never leave core. UI-H6 (no pre-join enumeration)
+// is enforced at the route by `resolveActor`; UI-H4 (no boardId in the body) is enforced by the DTO.
+export async function listParticipants(
+  participantRepo: ParticipantRepository,
+  actor: Actor,
+): Promise<Result<GuestParticipant[]>> {
+  const rows = await participantRepo.listByBoard(actor.boardId);
+  return ok(rows.map(toGuestParticipant));
 }
