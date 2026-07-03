@@ -13,6 +13,7 @@ const toBoard = (row: PrismaBoard): Board => ({
   ownerId: row.ownerId,
   name: row.name,
   shareToken: row.shareToken,
+  mode: row.mode,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -36,6 +37,11 @@ export class PrismaBoardRepository implements BoardRepository {
     } catch {
       // Redis is an acceleration layer for token lookups; the database remains authoritative.
     }
+  }
+
+  async getById(id: string) {
+    const row = await prisma.board.findUnique({ where: { id } });
+    return row ? toBoard(row) : null;
   }
 
   async getByOwnerId(ownerId: string) {
@@ -76,6 +82,13 @@ export class PrismaBoardRepository implements BoardRepository {
       });
       return board;
     });
+    const board = toBoard(row);
+    await this.cacheByToken(board);
+    return board;
+  }
+
+  async updateMode(id: string, mode: Board['mode']) {
+    const row = await prisma.board.update({ where: { id }, data: { mode } });
     const board = toBoard(row);
     await this.cacheByToken(board);
     return board;

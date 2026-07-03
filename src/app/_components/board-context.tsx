@@ -16,6 +16,7 @@ import type { GuestParticipantDTO } from '@/app/_lib/types';
 export type BoardContextValue = {
   boardId: string;
   token: string;
+  initialMode: 'DIRECT' | 'VOTE';
   participant: GuestParticipantDTO | null;
   isJoined: boolean;
   present?: boolean;
@@ -39,12 +40,14 @@ export function useBoard(): BoardContextValue {
 export function BoardProvider({
   boardId,
   token,
+  initialMode,
   participant,
   present = false,
   children,
 }: {
   boardId: string;
   token: string;
+  initialMode: 'DIRECT' | 'VOTE';
   participant: GuestParticipantDTO | null;
   present?: boolean;
   children: React.ReactNode;
@@ -53,8 +56,8 @@ export function BoardProvider({
   const isJoined = participant !== null;
 
   const value = useMemo<BoardContextValue>(
-    () => ({ boardId, token, participant, isJoined, present }),
-    [boardId, token, participant, isJoined, present],
+    () => ({ boardId, token, initialMode, participant, isJoined, present }),
+    [boardId, token, initialMode, participant, isJoined, present],
   );
 
   // UI-H2 — on a server-confirmed `!isJoined` (pre-join, expiry, cookie deletion, or an A→B navigation

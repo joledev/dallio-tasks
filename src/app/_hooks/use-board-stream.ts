@@ -4,11 +4,17 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { boardKeys } from '@/app/_lib/query-keys';
 import { boardActivityKeys, boardPresenceKeys, boardParticipantKeys } from '@/app/_lib/query-keys';
-import { applyBoardEventToCache, type TaskCacheEvent } from '@/app/_lib/board-cache';
+import {
+  applyBoardEventToCache,
+  applyProposalEventToCache,
+  type ProposalCacheEvent,
+  type TaskCacheEvent,
+} from '@/app/_lib/board-cache';
 import type { BoardEvent } from '@/core/realtime/events';
 import type { ActivityDTO } from '@/app/_lib/types';
 
 const TASK_EVENTS = ['task.created', 'task.updated', 'task.moved', 'task.deleted'] as const;
+const PROPOSAL_EVENTS = ['proposal.created', 'proposal.updated', 'proposal.applied'] as const;
 const ACTIVITY_LIMIT = 30;
 
 export function useBoardStream(token: string, enabled: boolean, present = false) {
@@ -39,6 +45,20 @@ export function useBoardStream(token: string, enabled: boolean, present = false)
 
     for (const event of TASK_EVENTS) source.addEventListener(event, onTaskEvent);
 
+    const onProposalEvent = (message: MessageEvent<string>) => {
+      try {
+        applyProposalEventToCache(
+          queryClient,
+          token,
+          JSON.parse(message.data) as ProposalCacheEvent,
+        );
+      } catch {
+        void queryClient.invalidateQueries({ queryKey: boardKeys(token) });
+      }
+    };
+
+    for (const event of PROPOSAL_EVENTS) source.addEventListener(event, onProposalEvent);
+
     const onPresenceEvent = () => {
       void queryClient.invalidateQueries({ queryKey: boardPresenceKeys(token).all });
     };
@@ -68,6 +88,7 @@ export function useBoardStream(token: string, enabled: boolean, present = false)
     return () => {
       source.removeEventListener('refresh', refresh);
       for (const event of TASK_EVENTS) source.removeEventListener(event, onTaskEvent);
+      for (const event of PROPOSAL_EVENTS) source.removeEventListener(event, onProposalEvent);
       source.removeEventListener('participant.joined', onJoined);
       source.removeEventListener('participant.left', onPresenceEvent);
       source.removeEventListener('activity.appended', onActivityEvent);

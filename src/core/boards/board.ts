@@ -5,6 +5,7 @@ export type Board = {
   ownerId: string;
   name: string;
   shareToken: string;
+  mode: 'DIRECT' | 'VOTE';
   taskCount?: number;
   createdAt: Date;
   updatedAt: Date;

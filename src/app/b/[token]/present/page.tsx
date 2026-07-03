@@ -16,6 +16,7 @@ export default async function PresentPage({ params }: Params) {
     <BoardProvider
       boardId={board.id}
       token={token}
+      initialMode={board.mode}
       participant={{ id: 'projector', displayName: 'Projector', color: 'zinc' }}
       present
     >

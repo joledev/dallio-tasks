@@ -11,6 +11,7 @@ const BOARD: Board = {
   ownerId: '00000000-0000-4000-8000-000000000001',
   name: 'Board A',
   shareToken: 'tok-a',
+  mode: 'DIRECT',
   createdAt: new Date('2020-01-01T00:00:00.000Z'),
   updatedAt: new Date('2020-01-01T00:00:00.000Z'),
 };

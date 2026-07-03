@@ -49,3 +49,11 @@ export const boardPresenceKeys = (token: string) => ({
 export const boardActivityKeys = (token: string) => ({
   all: [...boardKeys(token), 'activity'] as const,
 });
+
+export const boardProposalKeys = (token: string) => ({
+  all: [...boardKeys(token), 'proposals'] as const,
+});
+
+export const boardModeKeys = (token: string) => ({
+  all: [...boardKeys(token), 'mode'] as const,
+});

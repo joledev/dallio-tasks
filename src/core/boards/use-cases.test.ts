@@ -13,6 +13,7 @@ const board = (id: string, ownerId: string, name: string): Board => ({
   ownerId,
   name,
   shareToken: `tok-${id}`,
+  mode: 'DIRECT',
   createdAt: new Date(),
   updatedAt: new Date(),
 });
