@@ -17,11 +17,11 @@ const UNASSIGNED = '__unassigned__';
 
 export function AssignControl({
   taskId,
-  assigneeId,
+  assigneeParticipantId,
   className,
 }: {
   taskId: string;
-  assigneeId: string | null;
+  assigneeParticipantId: string | null;
   className?: string;
 }) {
   const { users, isLoading } = useUsers();
@@ -29,9 +29,9 @@ export function AssignControl({
 
   return (
     <Select
-      value={assigneeId ?? UNASSIGNED}
+      value={assigneeParticipantId ?? UNASSIGNED}
       onValueChange={(value) =>
-        assign.mutate({ id: taskId, assigneeId: value === UNASSIGNED ? null : value })
+        assign.mutate({ id: taskId, assigneeParticipantId: value === UNASSIGNED ? null : value })
       }
       disabled={assign.isPending || isLoading}
     >

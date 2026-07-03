@@ -27,7 +27,7 @@ const toTask = (row: TaskRow): Task => ({
   // boardId is nullable in the DB until L1c but the app always sets it (L1a backfill + a DB trigger
   // fills any interim write), so the domain treats it as non-null here.
   boardId: row.boardId!,
-  assigneeId: row.assigneeId,
+  assigneeParticipantId: row.assigneeParticipantId, // H1: → Participant (legacy assigneeId now dead)
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -38,7 +38,7 @@ export class PrismaTaskRepository implements TaskRepository {
       boardId: filter.boardId, // IDOR anchor — always present
       ...(filter.statusId && { statusId: filter.statusId }),
       ...(filter.priority && { priority: filter.priority }),
-      ...(filter.assigneeId && { assigneeId: filter.assigneeId }),
+      ...(filter.assigneeParticipantId && { assigneeParticipantId: filter.assigneeParticipantId }),
       ...(filter.q && { title: { contains: filter.q, mode: 'insensitive' } }),
     };
     const [items, total] = await prisma.$transaction([

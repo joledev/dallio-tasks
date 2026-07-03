@@ -6,8 +6,10 @@ import type { ErrorCode } from '@/core/shared/envelope';
 export const ERROR_MESSAGE: Record<ErrorCode, string> = {
   VALIDATION_ERROR: 'Please check the highlighted fields.',
   UNAUTHORIZED: 'Your session is not active. Reload the page.',
+  FORBIDDEN: 'That action is not allowed.',
   NOT_FOUND: 'That task no longer exists — the list has been refreshed.',
   CONFLICT: 'That value conflicts with an existing record.',
+  LIMIT_EXCEEDED: 'This board is full.',
   INTERNAL: 'Something went wrong. Please try again.',
 };
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { InMemoryTaskRepository } from '@/test/in-memory/task-repository';
-import { InMemoryUserRepository } from '@/test/in-memory/user-repository';
+import { InMemoryParticipantRepository } from '@/test/in-memory/participant-repository';
 import { InMemoryStatusRepository } from '@/test/in-memory/status-repository';
 import type { Actor } from '@/core/shared/actor';
 import { createTask, getTask, listTasks, updateTask, deleteTask, assignTask } from './use-cases';
@@ -71,7 +71,7 @@ describe('createTask — server-resolved status', () => {
     expect(res.data.status.slug).toBe('todo');
     expect(res.data.status.isDefault).toBe(true);
     expect(res.data.boardId).toBe(BOARD_A);
-    expect(res.data.assigneeId).toBeNull();
+    expect(res.data.assigneeParticipantId).toBeNull();
     expect(res.data.priority).toBe('HIGH');
   });
 
@@ -186,7 +186,7 @@ describe('listTasks — filtering', () => {
     await taskRepo.create(taskData(ids.todo, { title: 'Alpha', priority: 'LOW' }));
     await taskRepo.create(taskData(ids.done, { title: 'Beta', priority: 'HIGH' }));
     await taskRepo.create(
-      taskData(ids.done, { title: 'Gamma', priority: 'LOW', assigneeId: assignee }),
+      taskData(ids.done, { title: 'Gamma', priority: 'LOW', assigneeParticipantId: assignee }),
     );
     await taskRepo.create(taskData(ids.in_progress, { title: 'aLPha-two', priority: 'MEDIUM' }));
   });
@@ -205,8 +205,8 @@ describe('listTasks — filtering', () => {
     expect(res.data.items.map((t) => t.title).sort()).toEqual(['Alpha', 'Gamma']);
   });
 
-  it('filters by assigneeId', async () => {
-    const q = listTasksQuerySchema.parse({ assigneeId: assignee });
+  it('filters by assigneeParticipantId', async () => {
+    const q = listTasksQuerySchema.parse({ assigneeParticipantId: assignee });
     const res = await listTasks(taskRepo, actorA, q);
     if (!res.ok) throw new Error('ok');
     expect(res.data.items.map((t) => t.title)).toEqual(['Gamma']);
@@ -287,14 +287,14 @@ describe('sort allowlist (never injects, never passwordHash)', () => {
 describe('IDOR — board A cannot read/update/delete/assign board B (and vice versa)', () => {
   let taskRepo: InMemoryTaskRepository;
   let statusRepo: InMemoryStatusRepository;
-  let userRepo: InMemoryUserRepository;
+  let participantRepo: InMemoryParticipantRepository;
   let idsA: Awaited<ReturnType<typeof seedStatuses>>;
   let idsB: Awaited<ReturnType<typeof seedStatuses>>;
   let taskOfA: string;
 
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
-    userRepo = new InMemoryUserRepository();
+    participantRepo = new InMemoryParticipantRepository();
     idsA = await seedStatuses(statusRepo, BOARD_A);
     idsB = await seedStatuses(statusRepo, BOARD_B);
     taskOfA = (await taskRepo.create(taskData(idsA.todo, { title: 'A-owned', boardId: BOARD_A })))
@@ -348,13 +348,18 @@ describe('IDOR — board A cannot read/update/delete/assign board B (and vice ve
   });
 
   it('assignTask by B → NOT_FOUND (board scope wins over assignee validation)', async () => {
-    const assignee = await userRepo.create({ email: 'a@x.io', name: 'A', passwordHash: null });
+    const assignee = await participantRepo.create({
+      boardId: BOARD_B,
+      displayName: 'A',
+      color: null,
+      sessionTokenHash: 'hash-a',
+    });
     const res = await assignTask(
       taskRepo,
-      userRepo,
+      participantRepo,
       actorB,
       taskOfA,
-      assignTaskSchema.parse({ assigneeId: assignee.id }),
+      assignTaskSchema.parse({ assigneeParticipantId: assignee.id }),
     );
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
@@ -375,55 +380,74 @@ describe('IDOR — board A cannot read/update/delete/assign board B (and vice ve
   });
 });
 
-describe('assignTask', () => {
+describe('assignTask — repointed to the board Participant (H1)', () => {
   let taskRepo: InMemoryTaskRepository;
   let statusRepo: InMemoryStatusRepository;
-  let userRepo: InMemoryUserRepository;
+  let participantRepo: InMemoryParticipantRepository;
   let taskOfA: string;
 
   beforeEach(async () => {
     ({ statusRepo, taskRepo } = makeRepos());
-    userRepo = new InMemoryUserRepository();
+    participantRepo = new InMemoryParticipantRepository();
     const ids = await seedStatuses(statusRepo, BOARD_A);
     taskOfA = (await taskRepo.create(taskData(ids.todo, { boardId: BOARD_A }))).id;
   });
 
-  it('assigns to an existing user (happy path)', async () => {
-    const assignee = await userRepo.create({ email: 'b@x.io', name: 'B', passwordHash: null });
+  const makeParticipant = (boardId: string, hash: string) =>
+    participantRepo.create({ boardId, displayName: 'P', color: null, sessionTokenHash: hash });
+
+  it('assigns to a same-board participant (happy path)', async () => {
+    const assignee = await makeParticipant(BOARD_A, 'hash-a');
     const res = await assignTask(
       taskRepo,
-      userRepo,
+      participantRepo,
       actorA,
       taskOfA,
-      assignTaskSchema.parse({ assigneeId: assignee.id }),
+      assignTaskSchema.parse({ assigneeParticipantId: assignee.id }),
     );
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data.assigneeId).toBe(assignee.id);
+    if (res.ok) expect(res.data.assigneeParticipantId).toBe(assignee.id);
   });
 
-  it('rejects a non-existent assignee → VALIDATION_ERROR', async () => {
+  it('rejects a non-existent participant → NOT_FOUND', async () => {
     const ghost = randomUUID();
     const res = await assignTask(
       taskRepo,
-      userRepo,
+      participantRepo,
       actorA,
       taskOfA,
-      assignTaskSchema.parse({ assigneeId: ghost }),
+      assignTaskSchema.parse({ assigneeParticipantId: ghost }),
     );
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
+    if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
   });
 
-  it('assigneeId=null unassigns without touching the user repo', async () => {
+  it('rejects a participant from ANOTHER board → NOT_FOUND (board IDOR)', async () => {
+    const foreign = await makeParticipant(BOARD_B, 'hash-b');
     const res = await assignTask(
       taskRepo,
-      userRepo,
+      participantRepo,
+      actorA, // acting on board A's task…
+      taskOfA,
+      assignTaskSchema.parse({ assigneeParticipantId: foreign.id }), // …with board B's participant
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe('NOT_FOUND');
+    const still = await getTask(taskRepo, actorA, taskOfA);
+    if (!still.ok) throw new Error('ok');
+    expect(still.data.assigneeParticipantId).toBeNull(); // left unassigned
+  });
+
+  it('assigneeParticipantId=null unassigns without touching the participant repo', async () => {
+    const res = await assignTask(
+      taskRepo,
+      participantRepo,
       actorA,
       taskOfA,
-      assignTaskSchema.parse({ assigneeId: null }),
+      assignTaskSchema.parse({ assigneeParticipantId: null }),
     );
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data.assigneeId).toBeNull();
+    if (res.ok) expect(res.data.assigneeParticipantId).toBeNull();
   });
 });
 
@@ -442,7 +466,7 @@ function taskData(statusId: string, over: Partial<CreateTaskData> = {}): CreateT
     priority: 'MEDIUM',
     boardId: BOARD_A,
     createdByParticipantId: null,
-    assigneeId: null,
+    assigneeParticipantId: null,
     ...over,
   };
 }

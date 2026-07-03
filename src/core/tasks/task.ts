@@ -9,7 +9,8 @@ export type Task = {
   status: StatusRef; // joined status for display + position sort
   priority: TaskPriority;
   boardId: string; // IDOR anchor (was ownerId; the board is the scope from L1b)
-  assigneeId: string | null;
+  assigneeParticipantId: string | null; // H1: assignment repointed from User → board Participant
+
   createdAt: Date;
   updatedAt: Date;
 };

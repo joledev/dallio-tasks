@@ -47,7 +47,8 @@ export class InMemoryTaskRepository implements TaskRepository {
       if (t.boardId !== filter.boardId) return false; // IDOR anchor — always applied
       if (filter.statusId && t.statusId !== filter.statusId) return false;
       if (filter.priority && t.priority !== filter.priority) return false;
-      if (filter.assigneeId && t.assigneeId !== filter.assigneeId) return false;
+      if (filter.assigneeParticipantId && t.assigneeParticipantId !== filter.assigneeParticipantId)
+        return false;
       if (filter.q && !t.title.toLowerCase().includes(filter.q.toLowerCase())) return false;
       return true;
     });
@@ -78,7 +79,7 @@ export class InMemoryTaskRepository implements TaskRepository {
       statusId: data.statusId,
       priority: data.priority,
       boardId: data.boardId,
-      assigneeId: data.assigneeId,
+      assigneeParticipantId: data.assigneeParticipantId,
       createdAt: now,
       updatedAt: now,
     };
@@ -93,7 +94,8 @@ export class InMemoryTaskRepository implements TaskRepository {
     if (data.description !== undefined) row.description = data.description;
     if (data.statusId !== undefined) row.statusId = data.statusId;
     if (data.priority !== undefined) row.priority = data.priority;
-    if (data.assigneeId !== undefined) row.assigneeId = data.assigneeId;
+    if (data.assigneeParticipantId !== undefined)
+      row.assigneeParticipantId = data.assigneeParticipantId;
     row.updatedAt = new Date();
     return this.materialize(row);
   }

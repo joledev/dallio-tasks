@@ -4,7 +4,7 @@ import { resolveActingBoard } from '@/app/api/_shared/session';
 import { assignTaskSchema } from '@/core/tasks/schema';
 import { assignTask } from '@/core/tasks/use-cases';
 import { taskRepository } from '@/core/tasks/container';
-import { userRepository } from '@/core/users/container';
+import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -17,6 +17,6 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!id.ok) return id;
     const parsed = parse(assignTaskSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return assignTask(taskRepository, userRepository, auth.data, id.data, parsed.data);
+    return assignTask(taskRepository, participantRepository, auth.data, id.data, parsed.data);
   });
 }

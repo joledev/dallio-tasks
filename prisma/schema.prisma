@@ -67,6 +67,10 @@ model Participant {
   activities    Activity[]
 
   @@index([boardId])
+  // NB (L1b-guest / fase2_guest_indexes): the partial UNIQUE index
+  // `Participant_sessionTokenHash_key ON ("sessionTokenHash") WHERE "sessionTokenHash" IS NOT NULL`
+  // is created in raw SQL in the migration — Prisma cannot express a filtered UNIQUE in the schema
+  // (same limitation as the Status partial uniques above).
 }
 
 // Fase 2 (L1a expand) — append-only board audit log. taskId is a SOFT ref (no FK) so it survives task
@@ -129,4 +133,6 @@ model Task {
   board               Board?       @relation(fields: [boardId], references: [id], onDelete: Cascade)
   createdBy           Participant? @relation("TaskCreatedBy", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
   assigneeParticipant Participant? @relation("TaskAssigneeParticipant", fields: [assigneeParticipantId], references: [id], onDelete: SetNull)
+
+  @@index([assigneeParticipantId]) // L1b-guest (fase2_guest_indexes): H1 assignment lookups
 }
