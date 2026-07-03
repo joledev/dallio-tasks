@@ -78,11 +78,20 @@ export function useBoardStream(
     const qs = present ? '?present=1' : '';
     const source = new EventSource(`/api/b/${encodeURIComponent(token)}/events${qs}`);
 
-    // Toast WHO did WHAT — but never for the current user's own actions (actorId === self), and never
-    // for system/null-actor events. Names resolve from the payload/participants cache; the text comes
-    // straight from the event data so no refetch is needed.
+    // The stream replays the retained backlog on every fresh connect (initial mount + each `refresh`
+    // re-mount send no Last-Event-ID). Cache patches from that replay are idempotent + invisible, but a
+    // toast per replayed event would be a "who did what" storm on page load. The server sends a one-shot
+    // `live` control frame at the replay→live boundary; suppress toasts until we've seen it.
+    let isLive = false;
+    const onLive = () => {
+      isLive = true;
+    };
+    source.addEventListener('live', onLive);
+
+    // Toast WHO did WHAT — only for LIVE events (not replayed backlog), never for the current user's own
+    // actions (actorId === self) or system/null-actor events. Names + text come from the event data.
     const notifyChange = (event: BoardEvent) => {
-      if (!event.actorId || event.actorId === selfParticipantId) return;
+      if (!isLive || !event.actorId || event.actorId === selfParticipantId) return;
       const message = changeToastMessage(event, actorDisplayName(queryClient, token, event));
       if (message) toast(message);
     };

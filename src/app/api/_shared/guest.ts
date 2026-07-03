@@ -45,9 +45,10 @@ export function guestCookie(token: string): GuestCookie {
 // baseline; this is the belt. A mutation must present a POSITIVE same-origin signal — either
 // `Sec-Fetch-Site: same-origin`/`none`, or an `Origin` header that matches the request origin. If BOTH
 // signals are absent the request is REJECTED (no header-less bypass), and any cross-site/cross-origin
-// signal is rejected outright. Mutations must also be `Content-Type: application/json` (blocks
-// simple/form cross-site POSTs). GET is never state-changing on guest routes, so this guard runs only
-// on POST/PATCH/DELETE handlers.
+// signal is rejected outright. Body-carrying mutations (POST/PATCH/PUT) must also be
+// `Content-Type: application/json` (blocks simple/form cross-site POSTs); a bodiless DELETE is exempt
+// (it can't be a simple form submission and is CORS-preflighted cross-origin). GET is never
+// state-changing on guest routes, so this guard runs only on the mutation handlers.
 export function guestCsrfCheck(req: Request): Result<null> {
   const secFetchSite = req.headers.get('sec-fetch-site');
   // A cross-site fetch-metadata signal is an immediate reject.
