@@ -247,7 +247,7 @@ export default function Home() {
         {boards.data && boards.data.length > 0 ? (
           <section aria-label="Your boards" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {boards.data.map((board) => (
-              <BoardCard key={board.id} board={board} />
+              <BoardCard key={board.shareToken} board={board} />
             ))}
           </section>
         ) : null}

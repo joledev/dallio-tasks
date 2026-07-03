@@ -34,12 +34,15 @@ describe('POST /api/boards', () => {
     const res = await POST(createRequest());
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body).toMatchObject({
-      ok: true,
-      data: { ownerId: OWNER_ID, name: 'Launch' },
-    });
+    // Public projection: name + shareToken on the wire, NO internal id / ownerId.
+    expect(body).toMatchObject({ ok: true, data: { name: 'Launch' } });
+    expect(body.data.id).toBeUndefined();
+    expect(body.data.ownerId).toBeUndefined();
     expect(body.data.shareToken).toMatch(/^[0-9a-f]{32}$/);
-    await expect(statusRepository.list(body.data.id)).resolves.toHaveLength(3);
+    // owner-scoping + status seeding verified server-side via the stored board (id/ownerId not exposed).
+    const stored = await boardRepository.getByToken(body.data.shareToken);
+    expect(stored?.ownerId).toBe(OWNER_ID);
+    await expect(statusRepository.list(stored!.id)).resolves.toHaveLength(3);
   });
 
   it('returns RATE_LIMITED/429 over the per-IP create cap', async () => {
