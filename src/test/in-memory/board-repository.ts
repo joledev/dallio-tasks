@@ -19,6 +19,10 @@ export class InMemoryBoardRepository implements BoardRepository {
     this.rows = [...seed];
   }
 
+  async getById(id: string) {
+    return this.rows.find((b) => b.id === id) ?? null;
+  }
+
   async getByOwnerId(ownerId: string) {
     return this.rows.find((b) => b.ownerId === ownerId) ?? null;
   }
@@ -38,6 +42,7 @@ export class InMemoryBoardRepository implements BoardRepository {
       ownerId,
       name,
       shareToken: randomBytes(16).toString('hex'),
+      mode: 'DIRECT',
       createdAt: now,
       updatedAt: now,
     };
@@ -48,5 +53,13 @@ export class InMemoryBoardRepository implements BoardRepository {
       }
     }
     return board;
+  }
+
+  async updateMode(id: string, mode: Board['mode']) {
+    const row = this.rows.find((b) => b.id === id);
+    if (!row) return null;
+    row.mode = mode;
+    row.updatedAt = new Date();
+    return row;
   }
 }

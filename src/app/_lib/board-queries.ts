@@ -6,6 +6,8 @@ import {
   boardParticipantKeys,
   boardPresenceKeys,
   boardActivityKeys,
+  boardProposalKeys,
+  boardModeKeys,
   type TaskListFilters,
 } from '@/app/_lib/query-keys';
 import type {
@@ -15,6 +17,8 @@ import type {
   StatusDTO,
   GuestParticipantDTO,
   PresenceSnapshotDTO,
+  ProposalDTO,
+  BoardModeDTO,
 } from '@/app/_lib/types';
 
 // Pure TanStack `useQuery` option builders for the guest board. Kept as plain functions (NOT hooks) so
@@ -84,6 +88,30 @@ export function boardActivityQueryOptions(
   return {
     queryKey: boardActivityKeys(token).all,
     queryFn: () => boardApi(token, present).activity(),
+    enabled: isJoined,
+  };
+}
+
+export function boardProposalsQueryOptions(
+  token: string,
+  isJoined: boolean,
+): UseQueryOptions<ProposalDTO[]> {
+  return {
+    queryKey: boardProposalKeys(token).all,
+    queryFn: () => boardApi(token).proposals.list(),
+    enabled: isJoined,
+  };
+}
+
+export function boardModeQueryOptions(
+  token: string,
+  isJoined: boolean,
+  initialMode: BoardModeDTO['mode'],
+): UseQueryOptions<BoardModeDTO> {
+  return {
+    queryKey: boardModeKeys(token).all,
+    queryFn: () => boardApi(token).mode.get(),
+    initialData: { mode: initialMode },
     enabled: isJoined,
   };
 }

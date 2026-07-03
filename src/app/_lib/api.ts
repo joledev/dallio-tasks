@@ -8,6 +8,7 @@ import type {
 } from '@/core/tasks/schema';
 import type { CreateStatusInput } from '@/core/statuses/schema';
 import type { JoinBoardInput } from '@/core/participants/schema';
+import type { CreateProposalInput, VoteInput, BoardModeInput } from '@/core/proposals/schema';
 import type {
   ActivityDTO,
   BoardDTO,
@@ -17,6 +18,8 @@ import type {
   GuestParticipantDTO,
   Paginated,
   PresenceSnapshotDTO,
+  ProposalDTO,
+  BoardModeDTO,
 } from './types';
 import type { TaskListFilters } from './query-keys';
 import type { CreateBoardInput } from '@/core/boards/schema';
@@ -178,6 +181,23 @@ export function boardApi(token: string, present = false) {
     presence: () => request<PresenceSnapshotDTO>(readPath('/presence')),
 
     activity: () => request<ActivityDTO[]>(readPath('/activity')),
+
+    proposals: {
+      list: () => request<ProposalDTO[]>(`${base}/proposals`),
+      create: (body: CreateProposalInput) =>
+        request<ProposalDTO>(`${base}/proposals`, { method: 'POST', body: JSON.stringify(body) }),
+      vote: (id: string, body: VoteInput) =>
+        request<ProposalDTO>(`${base}/proposals/${id}/vote`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+    },
+
+    mode: {
+      get: () => request<BoardModeDTO>(`${base}/mode`),
+      set: (body: BoardModeInput) =>
+        request<BoardModeDTO>(`${base}/mode`, { method: 'POST', body: JSON.stringify(body) }),
+    },
   };
 }
 

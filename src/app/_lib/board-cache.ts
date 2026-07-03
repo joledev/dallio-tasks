@@ -3,7 +3,8 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import type { BoardEvent } from '@/core/realtime/events';
 import type { Paginated, TaskDTO } from '@/app/_lib/types';
-import { boardTaskKeys } from '@/app/_lib/query-keys';
+import type { ProposalDTO } from '@/app/_lib/types';
+import { boardProposalKeys, boardTaskKeys } from '@/app/_lib/query-keys';
 
 export type ListSnapshot = Array<[QueryKey, Paginated<TaskDTO> | undefined]>;
 export type OptimisticContext = { previous: ListSnapshot };
@@ -17,6 +18,12 @@ type TaskBoardEvent = Extract<
 
 type DeletedBoardEvent = Extract<BoardEvent, { type: 'task.deleted' }>;
 export type TaskCacheEvent = TaskBoardEvent | DeletedBoardEvent;
+export type ProposalCacheEvent = Extract<
+  BoardEvent,
+  { type: 'proposal.created' | 'proposal.updated' | 'proposal.applied' }
+> & {
+  data: ProposalDTO;
+};
 
 export function patchCachedTask(
   queryClient: QueryClient,
@@ -85,4 +92,16 @@ export function applyBoardEventToCache(
   } else {
     removeCachedTask(queryClient, listKey, event.data.id);
   }
+}
+
+export function applyProposalEventToCache(
+  queryClient: QueryClient,
+  token: string,
+  event: ProposalCacheEvent,
+) {
+  queryClient.setQueryData<ProposalDTO[]>(boardProposalKeys(token).all, (old = []) => {
+    if (event.type === 'proposal.created') return [event.data, ...old];
+    const next = old.map((proposal) => (proposal.id === event.data.id ? event.data : proposal));
+    return next.some((proposal) => proposal.id === event.data.id) ? next : [event.data, ...old];
+  });
 }

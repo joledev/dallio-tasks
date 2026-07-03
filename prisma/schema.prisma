@@ -15,6 +15,22 @@ enum Priority {
   HIGH
 }
 
+enum BoardMode {
+  DIRECT
+  VOTE
+}
+
+enum ProposalStatus {
+  PENDING
+  APPLIED
+  REJECTED
+}
+
+enum VoteValue {
+  APPROVE
+  REJECT
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
@@ -37,6 +53,7 @@ model Board {
   ownerId    String   @db.Uuid // the owning user (board dashboard authz anchor)
   name       String
   shareToken String   @unique // unguessable, URL-safe; the guest entry point
+  mode       BoardMode @default(DIRECT)
   createdAt  DateTime @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime @updatedAt @db.Timestamptz(6)
 
@@ -45,6 +62,7 @@ model Board {
   statuses     Status[]
   participants Participant[]
   activities   Activity[]
+  proposals    Proposal[]
 
   @@index([ownerId])
 }
@@ -65,6 +83,8 @@ model Participant {
   createdTasks  Task[]     @relation("TaskCreatedBy")
   assignedTasks Task[]     @relation("TaskAssigneeParticipant")
   activities    Activity[]
+  proposals     Proposal[] @relation("ProposalCreatedBy")
+  votes         Vote[]
 
   @@index([boardId])
   // NB (L1b-guest / fase2_guest_indexes): the partial UNIQUE index
@@ -128,8 +148,46 @@ model Task {
   board               Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
   createdBy           Participant? @relation("TaskCreatedBy", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
   assigneeParticipant Participant? @relation("TaskAssigneeParticipant", fields: [assigneeParticipantId], references: [id], onDelete: SetNull)
+  proposals           Proposal[]
 
   @@index([assigneeParticipantId]) // L1b-guest (fase2_guest_indexes): H1 assignment lookups
   @@index([boardId, statusId]) // L1c-b: board-scoped list path (replaces Task_ownerId_statusId_idx)
   @@index([boardId, createdAt]) // L1c-b: board-scoped list path (replaces Task_ownerId_createdAt_idx)
+}
+
+model Proposal {
+  id                     String         @id @default(uuid()) @db.Uuid
+  boardId                String         @db.Uuid
+  kind                   String
+  targetTaskId           String?        @db.Uuid
+  payload                Json
+  targetVersion          DateTime?      @db.Timestamptz(6)
+  status                 ProposalStatus @default(PENDING)
+  meta                   Json?
+  createdByParticipantId String?        @db.Uuid
+  createdAt              DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime       @updatedAt @db.Timestamptz(6)
+
+  board     Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  target    Task?        @relation(fields: [targetTaskId], references: [id], onDelete: SetNull)
+  createdBy Participant? @relation("ProposalCreatedBy", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
+  votes     Vote[]
+
+  @@index([boardId, status, createdAt])
+  @@index([targetTaskId])
+}
+
+model Vote {
+  id            String    @id @default(uuid()) @db.Uuid
+  proposalId    String    @db.Uuid
+  participantId String    @db.Uuid
+  value         VoteValue
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  proposal    Proposal    @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, participantId])
+  @@index([participantId])
 }
