@@ -1,52 +1,28 @@
 'use client';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useUsers } from '@/app/_hooks/use-users';
-import { useTaskMutations } from '@/app/_hooks/use-task-mutations';
 import { cn } from '@/lib/utils';
 
-// Radix Select forbids an empty-string value, so "Unassigned" gets a sentinel mapped back to `null`.
-const UNASSIGNED = '__unassigned__';
-
+// H1 repointed assignment from Users → board Participants. The participant picker ships with the board
+// view (next pass), so the owner UI renders a NON-INTERACTIVE placeholder instead of a control that
+// would post a User id into the participant-scoped assign endpoint (which would always 404). No
+// mutation is fired from here, and no participant id is resolved against the user map.
 export function AssignControl({
-  taskId,
   assigneeParticipantId,
   className,
 }: {
-  taskId: string;
   assigneeParticipantId: string | null;
   className?: string;
 }) {
-  const { users, isLoading } = useUsers();
-  const { assign } = useTaskMutations();
-
   return (
-    <Select
-      value={assigneeParticipantId ?? UNASSIGNED}
-      onValueChange={(value) =>
-        assign.mutate({ id: taskId, assigneeParticipantId: value === UNASSIGNED ? null : value })
-      }
-      disabled={assign.isPending || isLoading}
+    <div
+      title="Assignment moves to board participants (coming with the board view)"
+      aria-label="Assignment moves to board participants (coming with the board view)"
+      className={cn(
+        'border-input bg-muted text-muted-foreground flex h-9 w-[160px] cursor-not-allowed items-center rounded-md border px-3 text-sm',
+        className,
+      )}
     >
-      <SelectTrigger size="sm" className={cn('w-[160px]', className)} aria-label="Assignee">
-        <SelectValue placeholder="Unassigned" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
-        {users.length > 0 ? <SelectSeparator /> : null}
-        {users.map((user) => (
-          <SelectItem key={user.id} value={user.id}>
-            {user.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      {assigneeParticipantId ? 'Assigned' : 'Unassigned'}
+    </div>
   );
 }

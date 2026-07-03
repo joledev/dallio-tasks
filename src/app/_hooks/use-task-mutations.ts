@@ -85,20 +85,8 @@ export function useTaskMutations() {
     onSettled: invalidateTasks,
   });
 
-  const assign = useMutation<
-    TaskDTO,
-    ApiError,
-    { id: string; assigneeParticipantId: string | null },
-    OptimisticContext
-  >({
-    mutationFn: ({ id, assigneeParticipantId }) => api.assignTask(id, { assigneeParticipantId }),
-    onMutate: ({ id, assigneeParticipantId }) => beginOptimistic(id, { assigneeParticipantId }),
-    onError: (error, _vars, context) => {
-      rollback(context);
-      toast.error(messageFor(error));
-    },
-    onSettled: invalidateTasks,
-  });
-
-  return { create, update, remove, assign };
+  // NB: the inline assign mutation was removed with the H1 repoint — assignment now targets board
+  // Participants and its picker ships with the board view. The owner UI no longer posts to the assign
+  // endpoint (AssignControl is a non-interactive placeholder), so there is no assign mutation here.
+  return { create, update, remove };
 }

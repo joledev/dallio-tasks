@@ -16,15 +16,12 @@ import { DeleteTaskDialog } from '@/app/_components/delete-task-dialog';
 import { PrioritySelect } from '@/app/_components/priority-select';
 import { StatusSelect } from '@/app/_components/status-select';
 import { TaskDialog } from '@/app/_components/task-dialog';
-import { useUsers } from '@/app/_hooks/use-users';
 import type { TaskDTO } from '@/app/_lib/types';
 import { cn } from '@/lib/utils';
 
 export function TaskCard({ task }: { task: TaskDTO }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const { nameFor } = useUsers();
-  const assigneeName = nameFor(task.assigneeParticipantId);
 
   // Drag source. The DnD status change is an *enhancement* layered over the inline StatusSelect below
   // (the accessible keyboard/touch fallback that always stays present). `data.statusId` lets the board's
@@ -91,15 +88,11 @@ export function TaskCard({ task }: { task: TaskDTO }) {
       <div className="mt-4 grid gap-2">
         <StatusSelect taskId={task.id} statusId={task.statusId} className="w-full" />
         <PrioritySelect taskId={task.id} priority={task.priority} className="w-full" />
-        <AssignControl
-          taskId={task.id}
-          assigneeParticipantId={task.assigneeParticipantId}
-          className="w-full"
-        />
+        <AssignControl assigneeParticipantId={task.assigneeParticipantId} className="w-full" />
       </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        {assigneeName ? `Assigned to ${assigneeName}` : 'Unassigned'}
+        {task.assigneeParticipantId ? 'Assigned' : 'Unassigned'}
       </p>
 
       <TaskDialog mode="edit" task={task} open={editOpen} onOpenChange={setEditOpen} />
@@ -117,9 +110,6 @@ export function TaskCard({ task }: { task: TaskDTO }) {
 // It mirrors the card's look (title, snippet, badges, assignee) without the draggable/select wiring,
 // so there are no duplicate registered draggables or focusable controls floating with the cursor.
 export function TaskCardOverlay({ task }: { task: TaskDTO }) {
-  const { nameFor } = useUsers();
-  const assigneeName = nameFor(task.assigneeParticipantId);
-
   return (
     <article className="bg-card text-card-foreground w-72 max-w-full rotate-1 cursor-grabbing rounded-lg border p-4 shadow-lg">
       <div className="flex items-start gap-2">
@@ -140,7 +130,7 @@ export function TaskCardOverlay({ task }: { task: TaskDTO }) {
       </div>
 
       <p className="text-muted-foreground mt-3 text-xs">
-        {assigneeName ? `Assigned to ${assigneeName}` : 'Unassigned'}
+        {task.assigneeParticipantId ? 'Assigned' : 'Unassigned'}
       </p>
     </article>
   );
