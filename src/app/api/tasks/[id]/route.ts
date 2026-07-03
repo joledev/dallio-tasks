@@ -1,16 +1,17 @@
 import { handle } from '@/app/api/_shared/respond';
 import { parse, parseId } from '@/app/api/_shared/parse';
-import { resolveActingUserId } from '@/app/api/_shared/session';
+import { resolveActingBoard } from '@/app/api/_shared/session';
 import { updateTaskSchema } from '@/core/tasks/schema';
 import { getTask, updateTask, deleteTask } from '@/core/tasks/use-cases';
 import { taskRepository } from '@/core/tasks/container';
 import { statusRepository } from '@/core/statuses/container';
+import { boardRepository } from '@/core/boards/container';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Ctx) {
   return handle(async () => {
-    const auth = resolveActingUserId();
+    const auth = await resolveActingBoard(boardRepository);
     if (!auth.ok) return auth;
     const id = parseId((await params).id);
     if (!id.ok) return id;
@@ -20,7 +21,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PATCH(req: Request, { params }: Ctx) {
   return handle(async () => {
-    const auth = resolveActingUserId();
+    const auth = await resolveActingBoard(boardRepository);
     if (!auth.ok) return auth;
     const id = parseId((await params).id);
     if (!id.ok) return id;
@@ -32,7 +33,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   return handle(async () => {
-    const auth = resolveActingUserId();
+    const auth = await resolveActingBoard(boardRepository);
     if (!auth.ok) return auth;
     const id = parseId((await params).id);
     if (!id.ok) return id;

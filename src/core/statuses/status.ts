@@ -2,7 +2,7 @@ import type { StatusColor } from './schema';
 
 export type Status = {
   id: string;
-  ownerId: string;
+  boardId: string; // IDOR anchor (was ownerId; the board is the scope from L1b)
   name: string;
   slug: string;
   position: number;
@@ -12,7 +12,7 @@ export type Status = {
   updatedAt: Date;
 };
 
-// Public/wire projection embedded inside a Task (§3.4) and consumed by the UI. Drops ownerId +
+// Public/wire projection embedded inside a Task (§3.4) and consumed by the UI. Drops boardId +
 // timestamps (authz/audit fields the client never needs).
 export type StatusRef = Pick<Status, 'id' | 'name' | 'slug' | 'color' | 'position' | 'isDefault'>;
 
