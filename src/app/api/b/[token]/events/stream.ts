@@ -1,8 +1,16 @@
 import type { BoardEvent } from '@/core/realtime/events';
+import { participantJoined, participantLeft } from '@/core/realtime/events';
 import type { EventBus, ReplayResult, Unsubscribe } from '@/core/realtime/event-bus';
+import type { PublicParticipant } from '@/core/participants/participant';
+import type { PresenceStore } from '@/core/realtime/presence';
 
 const encoder = new TextEncoder();
 const PING_INTERVAL_MS = 15_000;
+
+export type StreamPresenceLifecycle = {
+  presence: PresenceStore;
+  participant: PublicParticipant;
+};
 
 export function frameBoardEvent(event: BoardEvent): string {
   return `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
@@ -52,16 +60,31 @@ export function createBoardEventStream(
   boardId: string,
   afterId: string | null,
   pingIntervalMs = PING_INTERVAL_MS,
+  lifecycle?: StreamPresenceLifecycle,
 ): ReadableStream<Uint8Array> {
   let unsubscribe: Unsubscribe | null = null;
   let closed = false;
   let ping: ReturnType<typeof setInterval> | null = null;
+  let joined = false;
 
   const cleanup = async () => {
     if (closed) return;
     closed = true;
     if (ping) clearInterval(ping);
     if (unsubscribe) await unsubscribe();
+    if (joined && lifecycle) {
+      const last = await lifecycle.presence.leave(boardId, lifecycle.participant.id);
+      if (last) {
+        const online = await lifecycle.presence.online(boardId);
+        await bus.publish(
+          boardId,
+          participantLeft(boardId, lifecycle.participant.id, {
+            participant: lifecycle.participant,
+            onlineCount: online.onlineCount,
+          }),
+        );
+      }
+    }
   };
 
   return new ReadableStream<Uint8Array>({
@@ -112,10 +135,28 @@ export function createBoardEventStream(
       }
       for (const event of replayed.events) enqueueEvent(event);
 
+      if (lifecycle) {
+        const first = await lifecycle.presence.join(boardId, lifecycle.participant.id);
+        joined = true;
+        if (first) {
+          const online = await lifecycle.presence.online(boardId);
+          await bus.publish(
+            boardId,
+            participantJoined(boardId, lifecycle.participant.id, {
+              participant: lifecycle.participant,
+              onlineCount: online.onlineCount,
+            }),
+          );
+        }
+      }
+
       live = true;
       for (const event of buffered.sort((a, b) => eventId(a) - eventId(b))) enqueueEvent(event);
 
-      ping = setInterval(() => enqueue(': ping\n\n'), pingIntervalMs);
+      ping = setInterval(() => {
+        if (lifecycle) void lifecycle.presence.touch(boardId, lifecycle.participant.id);
+        enqueue(': ping\n\n');
+      }, pingIntervalMs);
     },
     async cancel() {
       await cleanup();

@@ -9,8 +9,17 @@ import { joinBoard } from '@/core/participants/use-cases';
 import { toPublicParticipant } from '@/core/participants/participant';
 import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
+import { activityRepository } from '@/core/activity/container';
+import { eventBus, rateLimiter } from '@/core/realtime/container';
 
 type Ctx = { params: Promise<{ token: string }> };
+const JOIN_LIMIT = 5;
+const JOIN_WINDOW_SEC = 60;
+
+function requestIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || req.headers.get('x-real-ip') || 'unknown';
+}
 
 // POST /api/b/[token]/join — the public board-entry write. On a fresh join it sets the opaque guest
 // cookie (H4); on an idempotent rejoin (H2) it returns the existing participant and sets nothing new.
@@ -19,6 +28,9 @@ export async function POST(req: Request, { params }: Ctx) {
   try {
     const csrf = guestCsrfCheck(req); // H5
     if (!csrf.ok) return noStore(respond(csrf));
+
+    const limited = await rateLimiter.check(`join:${requestIp(req)}`, JOIN_LIMIT, JOIN_WINDOW_SEC);
+    if (!limited.allowed) return noStore(respond(err('RATE_LIMITED', 'Too many join attempts')));
 
     const shareToken = (await params).token;
     const store = await cookies();
@@ -33,6 +45,8 @@ export async function POST(req: Request, { params }: Ctx) {
       shareToken,
       parsed.data,
       existing,
+      activityRepository,
+      eventBus,
     );
     if (!result.ok) return noStore(respond(result));
 

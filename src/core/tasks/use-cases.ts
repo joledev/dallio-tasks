@@ -5,7 +5,15 @@ import type { ParticipantRepository } from '@/core/participants/repository';
 import type { StatusRepository } from '@/core/statuses/repository';
 import { logger } from '@/core/shared/logger';
 import type { EventPublisher } from '@/core/realtime/event-bus';
-import { taskCreated, taskUpdated, taskMoved, taskDeleted } from '@/core/realtime/events';
+import {
+  activityAppended,
+  taskCreated,
+  taskUpdated,
+  taskMoved,
+  taskDeleted,
+} from '@/core/realtime/events';
+import { toActivityDTO, type ActivityAction } from '@/core/activity/activity';
+import type { ActivityRepository } from '@/core/activity/repository';
 import type { TaskRepository } from './repository';
 import type { Task } from './task';
 import type {
@@ -33,6 +41,40 @@ function publishTaskEvent(
   });
 }
 
+function publishActivity(
+  publisher: EventPublisher | undefined,
+  boardId: string,
+  actorId: string | null,
+  activity: ReturnType<typeof toActivityDTO>,
+) {
+  if (!publisher) return;
+  void publisher.publish(boardId, activityAppended(boardId, actorId, activity)).catch((e) => {
+    const scrubbed = e as { name?: string; code?: string };
+    logger.error(
+      { err: { name: scrubbed?.name, code: scrubbed?.code }, boardId },
+      'activity publish failed',
+    );
+  });
+}
+
+async function appendTaskActivity(
+  activityRepo: ActivityRepository | undefined,
+  publisher: EventPublisher | undefined,
+  actor: Actor,
+  action: ActivityAction,
+  task: Pick<Task, 'id' | 'title'>,
+) {
+  if (!activityRepo) return;
+  const activity = await activityRepo.append({
+    boardId: actor.boardId,
+    participantId: actor.participantId,
+    action,
+    taskId: task.id,
+    meta: { title: task.title },
+  });
+  publishActivity(publisher, actor.boardId, actor.participantId, toActivityDTO(activity));
+}
+
 // Rich use-case: resolves the status server-side. A supplied statusId is scope-checked (IDOR — a
 // foreign/unknown id is invisible → rejected); an absent one falls back to the board's default.
 export async function createTask(
@@ -41,6 +83,7 @@ export async function createTask(
   actor: Actor,
   input: CreateTaskInput,
   publisher?: EventPublisher,
+  activityRepo?: ActivityRepository,
 ): Promise<Result<Task>> {
   const statusId = input.statusId
     ? (await statusRepo.getById(input.statusId, actor.boardId))?.id
@@ -56,6 +99,7 @@ export async function createTask(
     createdByParticipantId: actor.participantId, // guest attribution (null for owner-direct)
     assigneeParticipantId: null, // created unassigned
   });
+  await appendTaskActivity(activityRepo, publisher, actor, 'task.created', task);
   publishTaskEvent(publisher, actor.boardId, taskCreated(actor.boardId, actor.participantId, task));
   return ok(task);
 }
@@ -97,17 +141,20 @@ export async function updateTask(
   id: string,
   input: UpdateTaskInput,
   publisher?: EventPublisher,
+  activityRepo?: ActivityRepository,
 ): Promise<Result<Task>> {
   // Scope-check a status change first: a cross-board status is invisible → rejected before the write.
   if (input.statusId && !(await statusRepo.getById(input.statusId, actor.boardId)))
     return err('VALIDATION_ERROR', 'Unknown status');
   const task = await repo.update(id, actor.boardId, input);
-  if (task)
+  if (task) {
+    await appendTaskActivity(activityRepo, publisher, actor, 'task.updated', task);
     publishTaskEvent(
       publisher,
       actor.boardId,
       taskUpdated(actor.boardId, actor.participantId, task),
     );
+  }
   return task ? ok(task) : err('NOT_FOUND', 'Task not found');
 }
 
@@ -118,12 +165,15 @@ export async function moveTask(
   id: string,
   input: MoveTaskInput,
   publisher?: EventPublisher,
+  activityRepo?: ActivityRepository,
 ): Promise<Result<Task>> {
   if (!(await statusRepo.getById(input.statusId, actor.boardId)))
     return err('VALIDATION_ERROR', 'Unknown status');
   const task = await repo.update(id, actor.boardId, input);
-  if (task)
+  if (task) {
+    await appendTaskActivity(activityRepo, publisher, actor, 'task.moved', task);
     publishTaskEvent(publisher, actor.boardId, taskMoved(actor.boardId, actor.participantId, task));
+  }
   return task ? ok(task) : err('NOT_FOUND', 'Task not found');
 }
 
@@ -132,10 +182,15 @@ export async function deleteTask(
   actor: Actor,
   id: string,
   publisher?: EventPublisher,
+  activityRepo?: ActivityRepository,
 ): Promise<Result<null>> {
+  const existing = await repo.get(id, actor.boardId);
+  if (!existing) return err('NOT_FOUND', 'Task not found');
   const removed = await repo.delete(id, actor.boardId);
-  if (removed)
+  if (removed) {
+    await appendTaskActivity(activityRepo, publisher, actor, 'task.deleted', existing);
     publishTaskEvent(publisher, actor.boardId, taskDeleted(actor.boardId, actor.participantId, id));
+  }
   return removed ? ok(null) : err('NOT_FOUND', 'Task not found');
 }
 
@@ -148,6 +203,7 @@ export async function assignTask(
   id: string,
   input: AssignTaskInput,
   publisher?: EventPublisher,
+  activityRepo?: ActivityRepository,
 ): Promise<Result<Task>> {
   // Check board scope FIRST: an off-board/absent task returns NOT_FOUND before any assignee lookup, so a
   // caller who can't reach the task can't use this endpoint to probe which participant ids exist. A
@@ -161,11 +217,13 @@ export async function assignTask(
   const task = await taskRepo.update(id, actor.boardId, {
     assigneeParticipantId: input.assigneeParticipantId,
   });
-  if (task)
+  if (task) {
+    await appendTaskActivity(activityRepo, publisher, actor, 'task.updated', task);
     publishTaskEvent(
       publisher,
       actor.boardId,
       taskUpdated(actor.boardId, actor.participantId, task),
     );
+  }
   return task ? ok(task) : err('NOT_FOUND', 'Task not found'); // update() re-checks the board scope
 }

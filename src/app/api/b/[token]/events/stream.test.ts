@@ -1,12 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '@/test/in-memory/event-bus';
+import { InMemoryPresenceStore } from '@/test/in-memory/presence';
 import type { EventBus, Unsubscribe } from '@/core/realtime/event-bus';
 import type { BoardEvent, NewBoardEvent } from '@/core/realtime/events';
 import { taskCreated, taskUpdated } from '@/core/realtime/events';
+import type { PublicParticipant } from '@/core/participants/participant';
 import type { Task } from '@/core/tasks/task';
 import { createBoardEventStream, frameBoardEvent, shouldRefreshForCursor } from './stream';
 
 const BOARD = '00000000-0000-4000-8000-00000000000a';
+const participant: PublicParticipant = {
+  id: '00000000-0000-4000-8000-0000000000f1',
+  boardId: BOARD,
+  displayName: 'Grace Hopper',
+  color: 'blue',
+};
 
 const task: Task = {
   id: 'task-1',
@@ -43,6 +51,16 @@ async function readChunks(stream: ReadableStream<Uint8Array>, count: number): Pr
     await reader.cancel();
   }
   return out;
+}
+
+async function openAndRead(stream: ReadableStream<Uint8Array>): Promise<{
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  text: string;
+}> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const { value } = await reader.read();
+  return { reader, text: value ? decoder.decode(value) : '' };
 }
 
 describe('SSE stream framing/replay helpers', () => {
@@ -140,5 +158,50 @@ describe('SSE stream framing/replay helpers', () => {
     const text = await readChunks(createBoardEventStream(bus, BOARD, '999', 60_000), 1);
 
     expect(text).toBe('event: refresh\ndata: {}\n\n');
+  });
+});
+
+describe('SSE presence lifecycle', () => {
+  it('connect adds presence and publishes joined only on the first tab', async () => {
+    const bus = new InMemoryEventBus();
+    const presence = new InMemoryPresenceStore();
+
+    const first = await openAndRead(
+      createBoardEventStream(bus, BOARD, '0', 60_000, { presence, participant }),
+    );
+    expect(first.text).toContain('event: participant.joined');
+    expect(bus.published.filter((event) => event.type === 'participant.joined')).toHaveLength(1);
+    expect((await presence.online(BOARD)).onlineCount).toBe(1);
+
+    const second = createBoardEventStream(bus, BOARD, '0', 60_000, { presence, participant });
+    const secondReader = second.getReader();
+    await vi.waitFor(() => expect(presence.connectionCount(BOARD, participant.id)).toBe(2));
+    expect(bus.published.filter((event) => event.type === 'participant.joined')).toHaveLength(1);
+
+    await secondReader.cancel();
+    expect(bus.published.filter((event) => event.type === 'participant.left')).toHaveLength(0);
+
+    await first.reader.cancel();
+    expect(bus.published.filter((event) => event.type === 'participant.left')).toHaveLength(1);
+    expect((await presence.online(BOARD)).onlineCount).toBe(0);
+  });
+
+  it('touches presence on keep-alive ticks', async () => {
+    vi.useFakeTimers();
+    try {
+      let clock = 1_000;
+      const bus = new InMemoryEventBus();
+      const presence = new InMemoryPresenceStore(() => clock);
+      const { reader } = await openAndRead(
+        createBoardEventStream(bus, BOARD, '0', 15_000, { presence, participant }),
+      );
+
+      clock += 15_000;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect((await presence.online(BOARD)).onlineCount).toBe(1);
+      await reader.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

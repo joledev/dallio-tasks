@@ -23,9 +23,20 @@ spec:
         app.kubernetes.io/name: dallio-tasks
         app.kubernetes.io/component: redis
     spec:
+      # Run as the non-root redis user. fsGroup makes the emptyDir group-writable. This (plus the
+      # command override below) avoids the stock entrypoint's `chown /data` step, which fails under
+      # `capabilities.drop: [ALL]` ("chown: Operation not permitted") and crash-loops the pod.
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
       containers:
         - name: redis
           image: redis:7-alpine # public Docker Hub → no ghcr-pull change, no new secret
+          # redis-server directly (not the chowning docker-entrypoint). No persistence — realtime state
+          # is disposable by design (emptyDir + Recreate), so nothing needs the data dir chowned/written.
+          command: ["redis-server", "--save", "", "--appendonly", "no"]
           ports:
             - name: redis
               containerPort: 6379
