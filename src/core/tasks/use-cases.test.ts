@@ -93,14 +93,33 @@ describe('createTask — server-resolved status', () => {
     if (!res.ok) expect(res.error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('drops client-supplied ownerId/assigneeId at the schema boundary', () => {
-    const parsed = createTaskSchema.parse({
+  it('REJECTS client-supplied ownerId/assigneeId at the schema boundary (.strict)', () => {
+    // Create: a smuggled scope/legacy key is rejected outright, not silently stripped.
+    const create = createTaskSchema.safeParse({
       title: 'Sneaky',
       ownerId: BOARD_B, // attacker tries to set scope
       assigneeId: BOARD_B,
     } as Record<string, unknown>);
-    expect('ownerId' in parsed).toBe(false);
-    expect('assigneeId' in parsed).toBe(false);
+    expect(create.success).toBe(false);
+
+    // Update: unknown key rejected too.
+    const update = updateTaskSchema.safeParse({
+      title: 'ok',
+      ownerId: BOARD_B,
+    } as Record<string, unknown>);
+    expect(update.success).toBe(false);
+
+    // Assign: the legacy `assigneeId` key is rejected (only assigneeParticipantId is accepted).
+    const assign = assignTaskSchema.safeParse({
+      assigneeParticipantId: null,
+      assigneeId: BOARD_B,
+    } as Record<string, unknown>);
+    expect(assign.success).toBe(false);
+
+    // The declared-only payloads still validate (the real UI never sends extra keys).
+    expect(createTaskSchema.safeParse({ title: 'Fine', priority: 'LOW' }).success).toBe(true);
+    expect(updateTaskSchema.safeParse({ title: 'Fine' }).success).toBe(true);
+    expect(assignTaskSchema.safeParse({ assigneeParticipantId: null }).success).toBe(true);
   });
 });
 

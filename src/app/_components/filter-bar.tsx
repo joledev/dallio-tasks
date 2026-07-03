@@ -14,7 +14,6 @@ import {
 import { PriorityEnum, TASK_SORT_FIELDS, type TaskPriority } from '@/core/tasks/schema';
 import { PRIORITY_LABEL, SORT_LABEL } from '@/app/_lib/labels';
 import { useTaskFilters } from '@/app/_hooks/use-task-filters';
-import { useUsers } from '@/app/_hooks/use-users';
 import { useStatuses } from '@/app/_hooks/use-statuses';
 import { TaskDialog } from './task-dialog';
 
@@ -23,7 +22,6 @@ const ALL = '__all__';
 
 export function FilterBar() {
   const { filters, view, set, clear, hasActiveFilters } = useTaskFilters();
-  const { users } = useUsers();
   const { statuses } = useStatuses();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -103,27 +101,10 @@ export function FilterBar() {
         </SelectContent>
       </Select>
 
-      {/* Assignee filter: the API filters by a concrete `assigneeId` (uuid) only — there is no
-          "unassigned" filter param, so the options are All + each user. */}
-      <Select
-        value={filters.assigneeParticipantId ?? ALL}
-        onValueChange={(v) => set({ assigneeParticipantId: v === ALL ? undefined : v })}
-      >
-        <SelectTrigger
-          className="h-11! w-full md:h-9! md:w-[160px]"
-          aria-label="Filter by assignee"
-        >
-          <SelectValue placeholder="All assignees" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>All assignees</SelectItem>
-          {users.map((user) => (
-            <SelectItem key={user.id} value={user.id}>
-              {user.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* Assignee filter removed for now: H1 repointed assignment to board Participants, but the
+          participant picker (and its name source) ships with the board view. A User-id filter here
+          would set `assigneeParticipantId=<User id>` and always match zero tasks, so it is hidden
+          until the UI pass wires it to participants. Status / priority / search stay fully working. */}
 
       {/* Sort + direction share one cell so the icon toggle stays next to its select (the card list
           has no column headers — this is the sole sort affordance on mobile). */}
