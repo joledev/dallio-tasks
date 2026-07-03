@@ -106,6 +106,7 @@ function ColumnQuickAdd({ statusId }: { statusId: string }) {
   };
 
   const submit = () => {
+    if (create.isPending) return; // guard the keyboard path against a double-submit
     const trimmed = title.trim();
     if (!trimmed) {
       cancel();
