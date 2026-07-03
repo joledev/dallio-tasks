@@ -1,4 +1,4 @@
-# Keep the build context small and free of secrets / process cruft.
+# Keep the build context small and free of secrets and local cruft.
 # NOTE: prisma/ is intentionally NOT ignored — the build runs `prisma generate`
 # and the runtime image ships the schema + migrations for the migrate Job.
 
@@ -25,9 +25,7 @@ playwright.config.ts
 vitest.config.ts
 vitest.integration.config.ts
 
-# process / orchestration / docs (not part of the runtime)
-.dev
-.claude
+# not part of the runtime image
 .husky
 docs
 *.md

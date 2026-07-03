@@ -1,14 +1,14 @@
 # UI Guidelines — Dallio Tasks
 
 > Companion to `code-quality.md`. How the interface looks and behaves. Goal: a calm, professional,
-> mobile-first product that reads as deliberate human design — never templated or "AI-generated".
+> mobile-first product that reads as deliberate, considered design — never templated or generic.
 
 ## 0. Anti-slop rules (hard)
 
 - **No emojis** in UI copy, labels, buttons, headings, or empty states. Plain, precise language.
 - **No hand-authored SVG icons.** Use the already-installed **`lucide-react`** (a free, MIT icon library).
   Never inline a bespoke `<svg>` path. If an icon isn't in lucide, pick the closest lucide equivalent or use text.
-- **No "AI slop" aesthetics:** no gratuitous gradients, glows, neon accents, purple-on-black hero vibes,
+- **No slop aesthetics:** no gratuitous gradients, glows, neon accents, purple-on-black hero vibes,
   giant rounded blobs, or decorative emoji bullets. No filler marketing copy. Restraint over decoration.
 - **No invented brand flourishes.** Match the existing shadcn/ui + zinc design tokens already in the app.
 

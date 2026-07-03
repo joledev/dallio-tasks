@@ -85,8 +85,7 @@ GDPR liability. A leaked log file no longer equals a leaked session.
 
 ### ADR-008 — Conventional Commits, not single emoji
 **Context.** The brief mandates commit messages that are a single emoji and nothing else.
-**Decision.** Conventional Commits (`feat:`, `fix:`, …), enforced by commitlint; no
-AI-authorship trailers in committed code.
+**Decision.** Conventional Commits (`feat:`, `fix:`, …), enforced by commitlint.
 **Consequence.** History is greppable, `git bisect`-friendly, and can drive changelog
 tooling. We give up the emoji parser the brief imagined; a structured prefix carries more
 signal anyway.
