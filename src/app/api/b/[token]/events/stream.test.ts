@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '@/test/in-memory/event-bus';
 import type { EventBus, Unsubscribe } from '@/core/realtime/event-bus';
 import type { BoardEvent, NewBoardEvent } from '@/core/realtime/events';
@@ -83,7 +83,7 @@ describe('SSE stream framing/replay helpers', () => {
         onEvent(replayed[0]);
         return () => undefined;
       },
-      replay: async () => replayed,
+      replay: async () => ({ events: replayed, oldestId: '2' }),
       getCurrentSeq: async () => '3',
     };
 
@@ -91,6 +91,45 @@ describe('SSE stream framing/replay helpers', () => {
 
     expect(text.match(/id: 2\n/g)).toHaveLength(1);
     expect(text.match(/id: 3\n/g)).toHaveLength(1);
+  });
+
+  it('signals refresh instead of partial replay when the retained backlog starts after the cursor', async () => {
+    const replayed = [
+      { ...taskUpdated(BOARD, null, { ...task, title: 'five' }), id: '5' } as BoardEvent,
+      { ...taskUpdated(BOARD, null, { ...task, title: 'six' }), id: '6' } as BoardEvent,
+    ];
+    const bus: EventBus = {
+      publish: async (_boardId: string, event: NewBoardEvent) =>
+        ({ ...event, id: '7' }) as BoardEvent,
+      subscribe: async () => () => undefined,
+      replay: async () => ({ events: replayed, oldestId: '5' }),
+      getCurrentSeq: async () => '6',
+    };
+
+    const text = await readChunks(createBoardEventStream(bus, BOARD, '2', 60_000), 1);
+
+    expect(text).toBe('event: refresh\ndata: {}\n\n');
+  });
+
+  it('unsubscribes when the stream is canceled while subscribe is still pending', async () => {
+    const unsubscribe = vi.fn();
+    let resolveSubscribe: ((unsubscribe: Unsubscribe) => void) | undefined;
+    const bus: EventBus = {
+      publish: async (_boardId: string, event: NewBoardEvent) =>
+        ({ ...event, id: '1' }) as BoardEvent,
+      subscribe: async () =>
+        new Promise<Unsubscribe>((resolve) => {
+          resolveSubscribe = resolve;
+        }),
+      replay: async () => ({ events: [], oldestId: null }),
+      getCurrentSeq: async () => '0',
+    };
+    const stream = createBoardEventStream(bus, BOARD, '0', 60_000);
+    const reader = stream.getReader();
+
+    await reader.cancel();
+    resolveSubscribe?.(unsubscribe);
+    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledOnce());
   });
 
   it('signals refresh when Last-Event-ID is above the current board seq', async () => {
