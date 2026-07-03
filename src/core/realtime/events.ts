@@ -1,5 +1,6 @@
 import type { Task } from '@/core/tasks/task';
 import type { PublicParticipant } from '@/core/participants/participant';
+import type { ActivityDTO } from '@/core/activity/activity';
 
 // FROZEN CONTRACT (freeze-first, gates L2): the BoardEvent discriminated union + factories.
 // Later layers (L2b live editing, L3 presence/activity) emit these; the SSE layer serializes them
@@ -38,7 +39,7 @@ export type BoardEvent =
   | (BoardEventEnvelope & { type: 'task.deleted'; data: { id: string } })
   | (BoardEventEnvelope & { type: 'participant.joined'; data: ParticipantPresence })
   | (BoardEventEnvelope & { type: 'participant.left'; data: ParticipantPresence })
-  | (BoardEventEnvelope & { type: 'activity.appended'; data: unknown });
+  | (BoardEventEnvelope & { type: 'activity.appended'; data: ActivityDTO });
 
 // Distributive Omit so `NewBoardEvent` stays a union (one arm per `type`), not a collapsed shape.
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -90,5 +91,5 @@ export const participantLeft = (
 export const activityAppended = (
   boardId: string,
   actorId: string | null,
-  activity: unknown,
+  activity: ActivityDTO,
 ): NewBoardEvent => ({ type: 'activity.appended', boardId, actorId, ts: now(), data: activity });

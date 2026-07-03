@@ -37,3 +37,11 @@ export const boardStatusKeys = (token: string) => ({
 export const boardParticipantKeys = (token: string) => ({
   all: [...boardKeys(token), 'participants'] as const,
 });
+
+export const boardPresenceKeys = (token: string) => ({
+  all: [...boardKeys(token), 'presence'] as const,
+});
+
+export const boardActivityKeys = (token: string) => ({
+  all: [...boardKeys(token), 'activity'] as const,
+});

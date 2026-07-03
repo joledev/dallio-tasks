@@ -10,6 +10,7 @@ import { statusRepository } from '@/core/statuses/container';
 import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
 import { eventBus } from '@/core/realtime/container';
+import { activityRepository } from '@/core/activity/container';
 
 type Ctx = { params: Promise<{ token: string; id: string }> };
 
@@ -45,7 +46,15 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (!id.ok) return id;
     const parsed = parse(updateTaskSchema, await req.json().catch(() => null), 'Invalid body');
     if (!parsed.ok) return parsed;
-    return updateTask(taskRepository, statusRepository, actor.data, id.data, parsed.data, eventBus);
+    return updateTask(
+      taskRepository,
+      statusRepository,
+      actor.data,
+      id.data,
+      parsed.data,
+      eventBus,
+      activityRepository,
+    );
   });
 }
 
@@ -63,6 +72,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
     if (!actor.ok) return actor;
     const id = parseId(p.id);
     if (!id.ok) return id;
-    return deleteTask(taskRepository, actor.data, id.data, eventBus);
+    return deleteTask(taskRepository, actor.data, id.data, eventBus, activityRepository);
   });
 }

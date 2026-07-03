@@ -9,6 +9,7 @@ import { taskRepository } from '@/core/tasks/container';
 import { participantRepository } from '@/core/participants/container';
 import { boardRepository } from '@/core/boards/container';
 import { eventBus } from '@/core/realtime/container';
+import { activityRepository } from '@/core/activity/container';
 
 type Ctx = { params: Promise<{ token: string; id: string }> };
 
@@ -35,6 +36,7 @@ export async function POST(req: Request, { params }: Ctx) {
       id.data,
       parsed.data,
       eventBus,
+      activityRepository,
     );
   });
 }

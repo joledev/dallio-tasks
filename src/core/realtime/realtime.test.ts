@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { InMemoryEventBus } from '@/test/in-memory/event-bus';
+import { InMemoryPresenceStore } from '@/test/in-memory/presence';
 import { InMemoryRateLimiter } from '@/test/in-memory/rate-limit';
 import { taskCreated } from './events';
 import { RedisEventBus } from './redis-event-bus';
@@ -124,6 +125,29 @@ describe('RateLimiter (in-memory)', () => {
 
     clock += 30_000; // advance past the 30s window
     expect((await limiter.check('write:pid', 1, 30)).allowed).toBe(true);
+  });
+});
+
+describe('PresenceStore (in-memory)', () => {
+  it('online excludes stale participants, prunes them, and counts non-stale distinct pids', async () => {
+    let clock = 100_000;
+    const presence = new InMemoryPresenceStore(() => clock);
+
+    await presence.join(BOARD, 'fresh');
+    await presence.join(BOARD, 'multi-tab');
+    await presence.join(BOARD, 'multi-tab');
+    presence.setLastSeen(BOARD, 'stale', clock - 45_000);
+
+    const snapshot = await presence.online(BOARD);
+    expect(snapshot).toEqual({
+      participantIds: ['fresh', 'multi-tab'],
+      onlineCount: 2,
+    });
+
+    clock += 1;
+    const afterPrune = await presence.online(BOARD);
+    expect(afterPrune.participantIds).not.toContain('stale');
+    expect(afterPrune.onlineCount).toBe(2);
   });
 });
 

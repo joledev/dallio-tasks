@@ -4,9 +4,18 @@ import {
   boardTaskKeys,
   boardStatusKeys,
   boardParticipantKeys,
+  boardPresenceKeys,
+  boardActivityKeys,
   type TaskListFilters,
 } from '@/app/_lib/query-keys';
-import type { Paginated, TaskDTO, StatusDTO, GuestParticipantDTO } from '@/app/_lib/types';
+import type {
+  ActivityDTO,
+  Paginated,
+  TaskDTO,
+  StatusDTO,
+  GuestParticipantDTO,
+  PresenceSnapshotDTO,
+} from '@/app/_lib/types';
 
 // Pure TanStack `useQuery` option builders for the guest board. Kept as plain functions (NOT hooks) so
 // the same token-scoped key + fetcher + `enabled` gate is shared by BOTH the context-aware shared hooks
@@ -49,6 +58,29 @@ export function boardParticipantsQueryOptions(
     queryKey: boardParticipantKeys(token).all,
     queryFn: () => boardApi(token).listParticipants(),
     staleTime: 5 * 60_000,
+    enabled: isJoined,
+  };
+}
+
+export function boardPresenceQueryOptions(
+  token: string,
+  isJoined: boolean,
+): UseQueryOptions<PresenceSnapshotDTO> {
+  return {
+    queryKey: boardPresenceKeys(token).all,
+    queryFn: () => boardApi(token).presence(),
+    refetchInterval: 25_000,
+    enabled: isJoined,
+  };
+}
+
+export function boardActivityQueryOptions(
+  token: string,
+  isJoined: boolean,
+): UseQueryOptions<ActivityDTO[]> {
+  return {
+    queryKey: boardActivityKeys(token).all,
+    queryFn: () => boardApi(token).activity(),
     enabled: isJoined,
   };
 }
