@@ -43,6 +43,7 @@ export class InMemoryBoardRepository implements BoardRepository {
       name,
       shareToken: randomBytes(16).toString('hex'),
       mode: 'DIRECT',
+      protected: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -61,5 +62,17 @@ export class InMemoryBoardRepository implements BoardRepository {
     row.mode = mode;
     row.updatedAt = new Date();
     return row;
+  }
+
+  async rename(id: string, name: string) {
+    const row = this.rows.find((b) => b.id === id);
+    if (!row) return null;
+    row.name = name;
+    row.updatedAt = new Date();
+    return row;
+  }
+
+  async deleteById(id: string) {
+    this.rows = this.rows.filter((b) => b.id !== id);
   }
 }

@@ -10,4 +10,6 @@ export interface BoardRepository {
   listByOwner(ownerId: string): Promise<Board[]>;
   createForOwner(ownerId: string, name: string): Promise<Board>;
   updateMode(id: string, mode: Board['mode']): Promise<Board | null>;
+  rename(id: string, name: string): Promise<Board | null>;
+  deleteById(id: string): Promise<void>;
 }

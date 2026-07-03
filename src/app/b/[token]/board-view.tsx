@@ -10,6 +10,7 @@ import { TaskBoard } from '@/app/_components/task-board/task-board';
 import { ActivityFeed } from '@/app/_components/activity-feed';
 import { BoardModeToggle, ProposalsPanel } from '@/app/_components/proposals-panel';
 import { PresenceStrip } from '@/app/_components/presence-strip';
+import { BoardRequestMenu } from '@/app/_components/board-request-menu';
 import { useTaskFilters } from '@/app/_hooks/use-task-filters';
 
 // The joined-guest board. This is the SAME composition as the flat `/` dashboard — FilterBar +
@@ -34,6 +35,7 @@ export function BoardView({ boardName }: { boardName: string }) {
         <div className="flex items-center gap-2">
           <BoardModeToggle />
           <ViewToggle />
+          <BoardRequestMenu />
         </div>
       </header>
 

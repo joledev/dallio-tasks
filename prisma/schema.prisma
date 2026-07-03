@@ -31,6 +31,17 @@ enum VoteValue {
   REJECT
 }
 
+enum BoardRequestKind {
+  RENAME
+  DELETE
+}
+
+enum BoardRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
@@ -49,22 +60,43 @@ model User {
 // unguessable shareToken (the /b/<token> URL + QR). Board-scoping of Task/Status arrives additively
 // here; the code cutover (ownerId → boardId) is L1b, the column drops are L1c.
 model Board {
-  id         String   @id @default(uuid()) @db.Uuid
-  ownerId    String   @db.Uuid // the owning user (board dashboard authz anchor)
+  id         String    @id @default(uuid()) @db.Uuid
+  ownerId    String    @db.Uuid // the owning user (board dashboard authz anchor)
   name       String
-  shareToken String   @unique // unguessable, URL-safe; the guest entry point
+  shareToken String    @unique // unguessable, URL-safe; the guest entry point
   mode       BoardMode @default(DIRECT)
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  protected  Boolean   @default(false) // the seed/demo board — never deletable, even via an approved request
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
 
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner        User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tasks        Task[]
   statuses     Status[]
   participants Participant[]
   activities   Activity[]
   proposals    Proposal[]
+  requests     BoardRequest[]
 
   @@index([ownerId])
+}
+
+// Board management (owner direct edit/delete + guest request flow). A guest cannot rename/delete a
+// board directly — they file a request here; the owner approves/rejects from the dashboard.
+// participantId is nullable so the row survives the requester leaving/being pruned (SetNull).
+model BoardRequest {
+  id            String             @id @default(uuid()) @db.Uuid
+  boardId       String             @db.Uuid
+  participantId String?            @db.Uuid
+  kind          BoardRequestKind
+  proposedName  String? // for RENAME
+  status        BoardRequestStatus @default(PENDING)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @db.Timestamptz(6)
+
+  board       Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+  @@index([boardId, status])
 }
 
 // Fase 2 (L1a expand) — a guest on a board. Identity is the opaque cookie whose sha256 lands in
@@ -79,18 +111,19 @@ model Participant {
   joinedAt         DateTime @default(now()) @db.Timestamptz(6)
   lastSeenAt       DateTime @default(now()) @db.Timestamptz(6)
 
-  board         Board      @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  createdTasks  Task[]     @relation("TaskCreatedBy")
-  assignedTasks Task[]     @relation("TaskAssigneeParticipant")
+  board         Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdTasks  Task[]         @relation("TaskCreatedBy")
+  assignedTasks Task[]         @relation("TaskAssigneeParticipant")
   activities    Activity[]
-  proposals     Proposal[] @relation("ProposalCreatedBy")
+  proposals     Proposal[]     @relation("ProposalCreatedBy")
   votes         Vote[]
-
-  @@index([boardId])
+  requests      BoardRequest[]
   // NB (L1b-guest / fase2_guest_indexes): the partial UNIQUE index
   // `Participant_sessionTokenHash_key ON ("sessionTokenHash") WHERE "sessionTokenHash" IS NOT NULL`
   // is created in raw SQL in the migration — Prisma cannot express a filtered UNIQUE in the schema
   // (same limitation as the Status partial uniques above).
+
+  @@index([boardId])
 }
 
 // Fase 2 (L1a expand) — append-only board audit log. taskId is a SOFT ref (no FK) so it survives task
@@ -124,10 +157,10 @@ model Status {
 
   board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   tasks Task[]
-
-  @@unique([boardId, slug]) // Fase 2 dedupe within board scope (protects L1b board-scoped writes)
   // NB: the per-scope single-isDefault partial unique indexes (owner + board) are created in raw SQL
   // in the migration — Prisma cannot express `WHERE "isDefault"` partial uniques in the schema.
+
+  @@unique([boardId, slug]) // Fase 2 dedupe within board scope (protects L1b board-scoped writes)
 }
 
 model Task {

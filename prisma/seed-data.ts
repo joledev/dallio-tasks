@@ -100,12 +100,13 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
   // expand migration created this exact board) is reused rather than duplicated.
   await prisma.board.upsert({
     where: { id: SEED_BOARD_ID },
-    update: { ownerId: OWNER_ID, name: 'My Board', shareToken: SEED_BOARD_TOKEN },
+    update: { ownerId: OWNER_ID, name: 'My Board', shareToken: SEED_BOARD_TOKEN, protected: true },
     create: {
       id: SEED_BOARD_ID,
       ownerId: OWNER_ID,
       name: 'My Board',
       shareToken: SEED_BOARD_TOKEN,
+      protected: true,
     },
   });
 

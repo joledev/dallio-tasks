@@ -24,6 +24,7 @@ function board(mode: Board['mode']): Board {
     name: 'Voting board',
     shareToken: 'vote-token',
     mode,
+    protected: false,
     createdAt: new Date('2020-01-01T00:00:00.000Z'),
     updatedAt: new Date('2020-01-01T00:00:00.000Z'),
   };

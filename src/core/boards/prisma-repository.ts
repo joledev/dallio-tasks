@@ -14,6 +14,7 @@ const toBoard = (row: PrismaBoard): Board => ({
   name: row.name,
   shareToken: row.shareToken,
   mode: row.mode,
+  protected: row.protected,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -65,9 +66,15 @@ export class PrismaBoardRepository implements BoardRepository {
     const rows = await prisma.board.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'asc' },
-      include: { _count: { select: { tasks: true } } },
+      include: {
+        _count: { select: { tasks: true, requests: { where: { status: 'PENDING' } } } },
+      },
     });
-    return rows.map((row) => ({ ...toBoard(row), taskCount: row._count.tasks }));
+    return rows.map((row) => ({
+      ...toBoard(row),
+      taskCount: row._count.tasks,
+      pendingRequestCount: row._count.requests,
+    }));
   }
 
   async createForOwner(ownerId: string, name: string) {
@@ -92,5 +99,20 @@ export class PrismaBoardRepository implements BoardRepository {
     const board = toBoard(row);
     await this.cacheByToken(board);
     return board;
+  }
+
+  async rename(id: string, name: string) {
+    const row = await prisma.board.update({ where: { id }, data: { name } }).catch(() => null);
+    if (!row) return null;
+    const board = toBoard(row);
+    await this.cacheByToken(board); // refresh the token cache so a stale name never lingers
+    return board;
+  }
+
+  async deleteById(id: string) {
+    // Best-effort: the cache exposes no delete/invalidate method, so a stale token-cache entry can
+    // outlive the row for up to TOKEN_CACHE_TTL_SEC — acceptable (getByToken re-checks the DB once the
+    // TTL lapses) and out of scope to add here.
+    await prisma.board.delete({ where: { id } });
   }
 }
